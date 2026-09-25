@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>&#x0634;&#x0644;&#x0645; &#x0622;&#x0646;&#x0644;&#x0627;&#x06CC;&#x0646;</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="home" class="screen">
+  <h1>&#x1F0A1; &#x0634;&#x0644;&#x0645; &#x0622;&#x0646;&#x0644;&#x0627;&#x06CC;&#x0646;</h1>
+  <div class="card-panel">
+    <input id="nameInput" placeholder="&#x0627;&#x0633;&#x0645;&#x062A; &#x0631;&#x0648; &#x0628;&#x0646;&#x0648;&#x06CC;&#x0633;" maxlength="16" autocomplete="nickname" required>
+    <button id="createBtn">&#x0633;&#x0627;&#x062E;&#x062A; &#x0631;&#x0648;&#x0645; &#x062C;&#x062F;&#x06CC;&#x062F;</button>
+    <div class="or">&#x06CC;&#x0627;</div>
+    <input id="roomInput" placeholder="&#x06A9;&#x062F; &#x0631;&#x0648;&#x0645;" maxlength="6" style="text-transform:uppercase">
+    <button id="joinBtn">&#x0648;&#x0631;&#x0648;&#x062F; &#x0628;&#x0647; &#x0631;&#x0648;&#x0645;</button>
+  </div>
+  <p id="homeError" class="error"></p>
+</div>
+
+<div id="lobby" class="screen hidden">
+  <h2>&#x0631;&#x0648;&#x0645;: <span id="lobbyRoomId"></span></h2>
+  <div id="seats" class="seats"></div>
+  <div id="teamNameEditor" class="hidden">
+    <label>&#x0627;&#x0633;&#x0645; &#x062A;&#x06CC;&#x0645; &#x06F1; (&#x062E;&#x0627;&#x0646;&#x0647;&#x200C;&#x0647;&#x0627;&#x06CC; &#x06F1;&#x0648;&#x06F3;): <input id="teamAName"></label>
+    <label>&#x0627;&#x0633;&#x0645; &#x062A;&#x06CC;&#x0645; &#x06F2; (&#x062E;&#x0627;&#x0646;&#x0647;&#x200C;&#x0647;&#x0627;&#x06CC; &#x06F2;&#x0648;&#x06F4;): <input id="teamBName"></label>
+  </div>
+  <button id="readyBtn" class="hidden">&#x0622;&#x0645;&#x0627;&#x062F;&#x0647;&#x200C;&#x0627;&#x0645;</button>
+  <button id="startBtn" class="hidden">&#x0634;&#x0631;&#x0648;&#x0639; &#x0628;&#x0627;&#x0632;&#x06CC;</button>
+  <p class="hint">&#x0645;&#x062F;&#x06CC;&#x0631; &#x0631;&#x0648;&#x0645; &#x0645;&#x06CC;&#x200C;&#x062A;&#x0648;&#x0627;&#x0646;&#x062F; &#x0628;&#x0627; &#x06A9;&#x0644;&#x06CC;&#x06A9; &#x0631;&#x0648;&#x06CC; &#x062F;&#x0648; &#x0635;&#x0646;&#x062F;&#x0644;&#x06CC; &#x062C;&#x0627;&#x06CC; &#x0628;&#x0627;&#x0632;&#x06CC;&#x06A9;&#x0646;&#x0627;&#x0646; &#x0631;&#x0627; &#x0639;&#x0648;&#x0636; &#x06A9;&#x0646;&#x062F;.</p>
+</div>
+
+<div id="game" class="screen hidden">
+  <div class="topbar">
+    <div class="round-status">
+      <div class="round-heading">
+        <span class="eyebrow">&#x062C;&#x0631;&#x06CC;&#x0627;&#x0646; &#x0628;&#x0627;&#x0632;&#x06CC;</span>
+        <strong id="roundInfo"></strong>
+      </div>
+      <button id="scoreBtn">&#x1F4CA; &#x062C;&#x062F;&#x0648;&#x0644; &#x062F;&#x0633;&#x062A;&#x200C;&#x0647;&#x0627;</button>
+    </div>
+  </div>
+
+  <div class="table" id="table">
+    <div id="trumpInfo" class="table-trump hidden"></div>
+    <div id="turnHint" class="turn-hint"></div>
+    <div class="seat pos-top"><div class="pname" id="name-top"></div></div>
+    <div class="seat pos-left"><div class="pname" id="name-left"></div></div>
+    <div class="seat pos-right"><div class="pname" id="name-right"></div></div>
+    <div class="team-tricks" id="teamTricksA"></div>
+    <div class="team-tricks" id="teamTricksB"></div>
+    <div class="center" id="trickArea"></div>
+    <div id="trickFeedback" class="trick-feedback hidden" aria-live="polite"></div>
+  </div>
+
+  <div id="biddingPanel" class="panel hidden">
+    <div id="bidStatus"></div>
+    <div id="bidOptions" class="bid-options"></div>
+    <button id="passBtn">&#x067E;&#x0627;&#x0633;</button>
+  </div>
+
+  <div id="kittyPanel" class="panel hidden">
+    <p>&#x06F4; &#x06A9;&#x0627;&#x0631;&#x062A; &#x0631;&#x0627; &#x0628;&#x0631;&#x0627;&#x06CC; &#x0632;&#x06CC;&#x0631;&#x0633;&#x0627;&#x0632;&#x06CC; &#x0627;&#x0646;&#x062A;&#x062E;&#x0627;&#x0628; &#x06A9;&#x0646; (&#x06A9;&#x0644;&#x06CC;&#x06A9; &#x06A9;&#x0646; &#x062A;&#x0627; &#x0627;&#x0646;&#x062A;&#x062E;&#x0627;&#x0628;/&#x0644;&#x063A;&#x0648; &#x0627;&#x0646;&#x062A;&#x062E;&#x0627;&#x0628; &#x0634;&#x0648;&#x062F;):</p>
+    <button id="confirmDiscard" disabled>&#x062A;&#x0627;&#x06CC;&#x06CC;&#x062F; (&#x06F4; &#x06A9;&#x0627;&#x0631;&#x062A; &#x0627;&#x0646;&#x062A;&#x062E;&#x0627;&#x0628; &#x06A9;&#x0646;)</button>
+  </div>
+
+  <div id="roundEndPanel" class="panel hidden">
+    <div id="roundEndText"></div>
+    <button id="nextRoundBtn" class="hidden">&#x062F;&#x0633;&#x062A; &#x0628;&#x0639;&#x062F;&#x06CC;</button>
+  </div>
+
+  <div id="myArea">
+    <div class="pname" id="name-bottom"></div>
+    <div class="hand" id="myHand"></div>
+  </div>
+
+  <div id="chatBox">
+    <button id="chatToggle" type="button" aria-expanded="false">
+      <span class="chat-title">&#x1F4AC; &#x0686;&#x062A;</span>
+      <span id="chatLatest">&#x0647;&#x0646;&#x0648;&#x0632; &#x067E;&#x06CC;&#x0627;&#x0645;&#x06CC; &#x0646;&#x06CC;&#x0633;&#x062A;</span>
+    </button>
+    <div id="chatExpanded" class="hidden">
+      <div id="chatMessages"></div>
+      <div class="chat-input">
+        <input id="chatInput" placeholder="&#x067E;&#x06CC;&#x0627;&#x0645; &#x0633;&#x0631;&#x06CC;&#x0639;...">
+        <button id="chatSend">&#x0627;&#x0631;&#x0633;&#x0627;&#x0644;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button id="leaveRoomBtn" class="leave-room hidden" type="button">&#x062E;&#x0631;&#x0648;&#x062C; &#x0627;&#x0632; &#x0631;&#x0648;&#x0645;</button>
+
+<div id="scoreModal" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-heading">
+      <div>
+        <span class="eyebrow">&#x062A;&#x0627;&#x0631;&#x06CC;&#x062E;&#x0686;&#x0647; &#x062C;&#x0627;&#x0645;&#x0639; &#x0628;&#x0627;&#x0632;&#x06CC;</span>
+        <h3>&#x062C;&#x062F;&#x0648;&#x0644; &#x0627;&#x0645;&#x062A;&#x06CC;&#x0627;&#x0632;&#x0627;&#x062A;</h3>
+      </div>
+      <button id="closeScore" class="icon-button" aria-label="&#x0628;&#x0633;&#x062A;&#x0646;">&#x2715;</button>
+    </div>
+    <div id="scoreTotals"></div>
+    <div id="scoreHistory"></div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+</body>
+</html>
