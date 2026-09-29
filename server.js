@@ -63,7 +63,8 @@ function makeDeck(partialShuffle = false) {
     }
 
     // Three short cut-and-riffle passes retain occasional suit runs without forcing them.
-    return [0, 1, 2].reduce((cards) => partialRiffle(cards), deck);
+    const RIFFLE_PASSES = 3; // کمتر = خال‌های مشابه بیشتر در یک دست
+    return Array.from({ length: RIFFLE_PASSES }).reduce((cards) => partialRiffle(cards), deck);
   }
 
   const deck = [];
@@ -469,7 +470,7 @@ io.on('connection', (socket) => {
   socket.on('nextRound', () => {
     const room = rooms[socket.data.roomId];
     if (!room || room.state !== 'roundEnd') return;
-    if (!getPlayer(room, socket.data.clientId)) return;
+    if (socket.data.clientId !== room.adminClientId) return;
     room.dealerSeat = nextSeat(room.dealerSeat);
     startDeal(room);
     broadcast(room);
