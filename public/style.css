@@ -342,3 +342,8 @@ button:not(:disabled):hover { filter: brightness(1.08); transform: translateY(-2
 #chatMessages { max-height:min(180px, 24vh); color:#f4f1e6; margin-bottom:6px; }
 #chatMessages b { color:#ffd47b; }
 .chat-input input { min-width:0; }
+
+.bid-players { flex-wrap:nowrap; direction:ltr; gap:4px; }
+.bid-chip { flex:1 1 0; min-width:0; text-align:center; direction:rtl; padding:5px 4px; }
+.bid-chip b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bid-chip span { white-space:nowrap; font-size:10.5px; }

@@ -300,7 +300,7 @@ function renderGame(state) {
     if (kittyRevealVisible && revealCards.length) {
       const reveal = document.createElement('div');
       reveal.className = 'kitty-reveal';
-      reveal.innerHTML = `<span class="reveal-caption">\u06A9\u0627\u0631\u062A\u200C\u0647\u0627\u06CC \u0645\u0648\u0633\u0637 \u0628\u0631\u0627\u06CC \u062D\u0627\u06A9\u0645</span><div class="reveal-cards">${revealCards.map((card) => `<div class="reveal-card${isRed(card) ? ' red' : ''}"><b>${RANK_LABEL[card.rank]}</b><span>${SUIT_SYM[card.suit]}</span></div>`).join('')}</div>`;
+      reveal.innerHTML = `<span class="reveal-caption">کارت‌های وسط</span><div class="reveal-cards">${revealCards.map((card) => `<div class="reveal-card${isRed(card) ? ' red' : ''}"><b>${RANK_LABEL[card.rank]}</b><span>${SUIT_SYM[card.suit]}</span></div>`).join('')}</div>`;
       trickArea.appendChild(reveal);
     }
   } else if (state.trick) {
@@ -348,7 +348,7 @@ function renderGame(state) {
     const bidderName = (state.players.find((p) => p.seat === state.bidding.turnSeat) || {}).name || '';
     $('bidStatus').textContent = (state.bidding.currentBid ? '\u0628\u0627\u0644\u0627\u062A\u0631\u06CC\u0646 \u0631\u0642\u0645: ' + state.bidding.currentBid + ' \u00B7 ' : '\u06A9\u0633\u06CC \u0646\u062E\u0648\u0627\u0646\u062F\u0647 \u00B7 ') + '\u0646\u0648\u0628\u062A: ' + bidderName;
     $('bidPlayers').innerHTML = [0, 1, 2, 3].map((k) => {
-      const s = (state.mySeat + k) % 4;
+      const s = (state.dealerSeat + k) % 4;
       const pl = state.players.find((p) => p.seat === s);
       const v = state.bidding.bids ? state.bidding.bids[s] : null;
       const turn = state.bidding.turnSeat === s;
@@ -384,7 +384,7 @@ function renderGame(state) {
     const teamName = (t) => state.teamNames[t];
     const resLabel = RESULT_LABELS[last.resultType] || last.resultType;
     $('roundEndText').innerHTML = `<b>${resLabel}</b><br>\u062D\u0627\u06A9\u0645: ${hakemName} (\u062E\u0648\u0627\u0646\u062F\u0647: ${last.bid})<br>\u0627\u0645\u062A\u06CC\u0627\u0632 ${teamName(last.hakemTeam)}: ${last.pointsHakem} (${last.deltaHakem >= 0 ? '+' : ''}${last.deltaHakem})<br>\u0627\u0645\u062A\u06CC\u0627\u0632 ${teamName(last.hakemTeam === 'A' ? 'B' : 'A')}: ${last.pointsOpp} (${last.deltaOpp >= 0 ? '+' : ''}${last.deltaOpp})<br><br>\u062C\u0645\u0639 \u06A9\u0644: ${teamName('A')} = ${state.scores.A} | ${teamName('B')} = ${state.scores.B}`;
-    $('nextRoundBtn').classList.remove('hidden');
+    $('nextRoundBtn').classList.toggle('hidden', !state.isAdmin);
   }
 
   renderChat(state);
@@ -396,12 +396,12 @@ function renderScoreModal() {
   const scoreB = Number(lastState.scores.B) || 0;
   const teamAName = escapeHtml(lastState.teamNames.A);
   const teamBName = escapeHtml(lastState.teamNames.B);
-  $('scoreTotals').innerHTML = `<div class="scoreboard-teambar"><div class="scoreboard-team team-a"><small>${teamAName}</small><strong>${scoreA.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div><div class="scoreboard-vs">VS</div><div class="scoreboard-team team-b"><small>${teamBName}</small><strong>${scoreB.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div></div>`;
+  $('scoreTotals').innerHTML = `<div class="scoreboard-caption"><span>\u0645\u06CC\u0632: \u0628\u0627\u0632\u06CC \u0622\u0646\u0644\u0627\u06CC\u0646</span><b>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0647\u062F\u0641: \u06F1\u06F6\u06F5</b></div><div class="scoreboard-teambar"><div class="scoreboard-team team-a"><small>${teamAName}</small><strong>${scoreA.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div><div class="scoreboard-vs">VS</div><div class="scoreboard-team team-b"><small>${teamBName}</small><strong>${scoreB.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div></div>`;
   if (!lastState.history.length) {
     $('scoreHistory').innerHTML = '<div class="empty-history">\u0647\u0646\u0648\u0632 \u062F\u0633\u062A\u06CC \u0628\u0647 \u067E\u0627\u06CC\u0627\u0646 \u0646\u0631\u0633\u06CC\u062F\u0647 \u0627\u0633\u062A.</div>';
     return;
   }
-  let rows = '<div class="score-table-wrap"><table class="scoreboard-table"><thead><tr><th>\u062F\u0633\u062A</th><th>${escapeHtml(lastState.teamNames.B)}<br><small>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</small></th><th>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0627\u06CC\u0646 \u062F\u0633\u062A</th><th>\u062A\u0639\u0647\u062F \u062D\u0627\u06A9\u0645</th><th>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0627\u06CC\u0646 \u062F\u0633\u062A</th><th>${escapeHtml(lastState.teamNames.A)}<br><small>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</small></th><th>\u0646\u062A\u06CC\u062C\u0647</th></tr></thead><tbody>';
+  let rows = '<div class="history-caption">\u0627\u0645\u062A\u06CC\u0627\u0632 \u0647\u0631 \u0631\u0627\u0648\u0646\u062F\u060C \u062A\u0639\u0647\u062F \u062D\u0627\u06A9\u0645\u060C \u0646\u062A\u06CC\u062C\u0647 \u0648 \u062C\u0645\u0639 \u06A9\u0644 \u0631\u0627 \u062F\u0631 \u06CC\u06A9 \u0633\u0637\u0631 \u0645\u06CC\u200C\u0628\u06CC\u0646\u06CC\u062F.</div><div class="score-table-wrap"><table class="scoreboard-table"><thead><tr><th>\u062F\u0633\u062A</th><th><b>' + escapeHtml(lastState.teamNames.B) + '</b><br><small>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</small></th><th>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0627\u06CC\u0646 \u062F\u0633\u062A</th><th>\u062A\u0639\u0647\u062F \u062D\u0627\u06A9\u0645</th><th>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0627\u06CC\u0646 \u062F\u0633\u062A</th><th><b>' + escapeHtml(lastState.teamNames.A) + '</b><br><small>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</small></th><th>\u0646\u062A\u06CC\u062C\u0647</th></tr></thead><tbody>';
   for (const h of lastState.history) {
     const hakemName = (lastState.players.find((p) => p.seat === h.hakemSeat) || {}).name || '';
     const oppTeam = h.hakemTeam === 'A' ? 'B' : 'A';
