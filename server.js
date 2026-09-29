@@ -5,7 +5,10 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { pingInterval: 20000, pingTimeout: 60000 });
+process.on('uncaughtException', (e) => console.error('uncaughtException', e));
+process.on('unhandledRejection', (e) => console.error('unhandledRejection', e));
+app.get('/health', (req, res) => res.send('ok'));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const SUITS = ['S', 'H', 'D', 'C']; // \u067E\u06CC\u06A9\u060C \u062F\u0644\u060C \u062E\u0634\u062A\u060C \u06AF\u0634\u0646\u06CC\u0632
@@ -235,6 +238,7 @@ function startDeal(room) {
     currentBid: 0,
     currentBidderSeat: null,
     active: [true, true, true, true],
+    bids: [null, null, null, null], // number | 'pass' | null
   };
 }
 
@@ -285,8 +289,9 @@ function handHasSuit(hand, suit) {
   return hand.some((c) => c.suit === suit);
 }
 
-function resolveTrick(room) {
+function resolveTrick(room, expected) {
   const t = room.trick;
+  if (!t || t !== expected || room.state !== 'playing' || t.cards.length !== 4) return;
   const lead = t.cards[0].card.suit;
   const trump = room.trumpSuit;
   let best = t.cards[0];
@@ -310,6 +315,7 @@ function resolveTrick(room) {
   for (const entry of t.cards) pts += cardBonus(entry.card);
   const isLastTrick = room.hands[0].length === 0 && room.hands[1].length === 0 && room.hands[2].length === 0 && room.hands[3].length === 0;
   if (isLastTrick) {
+    pts += 5; // کارتهای خوابانده شده = دست سی‌وسوم (۵ امتیاز)
     for (const c of room.buried) pts += cardBonus(c);
   }
   const team = teamOf(winnerSeat);
@@ -329,10 +335,11 @@ function finalizeRound(room) {
   const pointsHakem = room.roundPoints[hakemTeam];
   const pointsOpp = room.roundPoints[oppTeam];
   const ROUND_TOTAL = pointsHakem + pointsOpp;
+  const allTricks = room.tricksWon[hakemTeam] === 12;
   const yasaThreshold = Math.ceil((ROUND_TOTAL * 85) / 165);
   let resultType, deltaHakem, deltaOpp;
   if (room.bidAmount === 165) {
-    if (pointsHakem === 165 && pointsOpp === 0) {
+    if (allTricks) {
       resultType = 'sarshelem-success';
       deltaHakem = 330;
       deltaOpp = -330;
@@ -341,7 +348,7 @@ function finalizeRound(room) {
       deltaHakem = -330;
       deltaOpp = 2 * pointsOpp;
     }
-  } else if (pointsHakem === 165 && pointsOpp === 0) {
+  } else if (allTricks) {
     resultType = 'shelem';
     deltaHakem = 165;
     deltaOpp = -165;
@@ -462,7 +469,7 @@ io.on('connection', (socket) => {
   socket.on('nextRound', () => {
     const room = rooms[socket.data.roomId];
     if (!room || room.state !== 'roundEnd') return;
-    if (socket.data.clientId !== room.adminClientId) return;
+    if (!getPlayer(room, socket.data.clientId)) return;
     room.dealerSeat = nextSeat(room.dealerSeat);
     startDeal(room);
     broadcast(room);
@@ -479,6 +486,7 @@ io.on('connection', (socket) => {
     if (amount <= b.currentBid) return;
     b.currentBid = amount;
     b.currentBidderSeat = p.seat;
+    b.bids[p.seat] = amount;
     if (amount === 165) {
       appointHakem(room, p.seat, amount);
       broadcast(room);
@@ -496,6 +504,7 @@ io.on('connection', (socket) => {
     const b = room.bidding;
     if (!p || p.seat !== b.turnSeat) return;
     b.active[p.seat] = false;
+    b.bids[p.seat] = 'pass';
     const act = activeSeats(b);
     if (act.length >= 1) {
       let s = nextSeat(b.turnSeat);
@@ -532,6 +541,7 @@ io.on('connection', (socket) => {
     const card = hand.find((c) => c.id === cardId);
     if (!card) return;
     const t = room.trick;
+    if (t.cards.length >= 4) return; // دست در حال جمع شدن است
     if (t.cards.length > 0) {
       const lead = t.cards[0].card.suit;
       if (card.suit !== lead && handHasSuit(hand, lead)) return; // must follow suit
@@ -545,7 +555,10 @@ io.on('connection', (socket) => {
       broadcast(room);
     } else {
       broadcast(room);
-      setTimeout(() => { resolveTrick(room); broadcast(room); }, 1200);
+      setTimeout(() => {
+        try { resolveTrick(room, t); } catch (e) { console.error('resolveTrick', e); }
+        broadcast(room);
+      }, 1200);
     }
   });
 
@@ -577,10 +590,16 @@ io.on('connection', (socket) => {
     const room = rooms[socket.data.roomId];
     if (!room) return;
     const p = getPlayer(room, socket.data.clientId);
-    if (p) { p.connected = false; p.socketId = null; }
+    if (p && p.socketId === socket.id) { p.connected = false; p.socketId = null; room.lastActive = Date.now(); }
     broadcast(room);
   });
 });
+
+setInterval(() => {
+  for (const room of Object.values(rooms)) {
+    if (room.players.every((p) => !p.connected) && Date.now() - (room.lastActive || 0) > 60 * 60 * 1000) delete rooms[room.id];
+  }
+}, 10 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => console.log('listening on 0.0.0.0:' + PORT));
