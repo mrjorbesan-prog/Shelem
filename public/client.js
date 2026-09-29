@@ -90,24 +90,59 @@ function sendChat() {
   socket.emit('chatMessage', { text: v });
   $('chatInput').value = '';
 }
-let chatExpanded = false;
+let chatExpanded = false, chatSeenT = null, chatKey = '', chatBubbleTimer = null;
 function setChatExpanded(expanded) {
   chatExpanded = expanded;
   $('chatBox').classList.toggle('expanded', expanded);
   $('chatExpanded').classList.toggle('hidden', !expanded);
   $('chatToggle').setAttribute('aria-expanded', String(expanded));
   if (expanded) {
+    $('chatLatest').classList.add('hidden');
+    if (lastState) renderChat(lastState);
     $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
     $('chatInput').focus();
   }
 }
+function renderChat(state) {
+  const msgs = state.chat || [];
+  const latest = msgs[msgs.length - 1];
+  if (chatSeenT === null) chatSeenT = latest ? latest.t : 0;
+  const key = latest ? latest.t + '|' + msgs.length : '';
+  if (key !== chatKey) {
+    const firstRender = chatKey === '' && !latest ? false : chatKey === '';
+    chatKey = key;
+    const el = $('chatMessages');
+    el.innerHTML = msgs.map((m) => `<div><b>${escapeHtml(m.name)}:</b> ${escapeHtml(m.text)}</div>`).join('');
+    el.scrollTop = el.scrollHeight;
+    if (latest && !firstRender && !chatExpanded && latest.seat !== state.mySeat) {
+      const bubble = $('chatLatest');
+      bubble.textContent = `${latest.name}: ${latest.text}`;
+      bubble.classList.remove('hidden');
+      clearTimeout(chatBubbleTimer);
+      chatBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 4000);
+    }
+  }
+  if (chatExpanded && latest) chatSeenT = latest.t;
+  const unread = chatExpanded ? 0 : msgs.filter((m) => m.t > chatSeenT && m.seat !== state.mySeat).length;
+  const badge = $('chatBadge');
+  badge.textContent = unread > 9 ? '9+' : String(unread);
+  badge.classList.toggle('hidden', unread === 0);
+  $('chatBox').classList.toggle('expanded', chatExpanded);
+  $('chatExpanded').classList.toggle('hidden', !chatExpanded);
+}
 $('teamAName').addEventListener('change', () => socket.emit('setTeamName', { team: 'A', name: $('teamAName').value }));
 $('teamBName').addEventListener('change', () => socket.emit('setTeamName', { team: 'B', name: $('teamBName').value }));
 
+socket.on('connect', () => {
+  const rid = (lastState && lastState.roomId) || localStorage.getItem('shelem_roomId');
+  const nm = myName || localStorage.getItem('shelem_name');
+  if (rid && nm) socket.emit('joinRoom', { clientId, name: nm, roomId: rid });
+});
+setInterval(() => { fetch('/health').catch(() => {}); }, 4 * 60 * 1000);
 socket.on('state', (state) => {
   lastState = state;
   localStorage.setItem('shelem_roomId', state.roomId);
-  render(state);
+  try { render(state); } catch (e) { console.error(e); }
 });
 socket.on('leftRoom', () => {
   localStorage.removeItem('shelem_roomId');
@@ -123,6 +158,7 @@ socket.on('leftRoom', () => {
   selectedSeats = [];
   selectedKittyCards = [];
   setChatExpanded(false);
+  chatSeenT = null; chatKey = '';
 });
 
 socket.on('trickResult', ({ winnerSeat, points, trickNumber, wasCut }) => {
@@ -212,14 +248,16 @@ function renderGame(state) {
   }
   const rel = (seat) => (seat - state.mySeat + 4) % 4; // 0 me,1 right,2 top,3 left
   const posName = { 0: 'bottom', 1: 'right', 2: 'top', 3: 'left' };
+  const bidTag = (s) => {
+    if (state.state !== 'bidding' || !state.bidding || !state.bidding.bids) return '';
+    const v = state.bidding.bids[s];
+    return v === 'pass' ? ' · پاس' : v ? ' · ' + v : '';
+  };
   for (let s = 0; s < 4; s++) {
     const pl = state.players.find((p) => p.seat === s);
-    const pos = posName[rel(s)];
-    const nameEl = $('name-' + pos);
-    if (nameEl) nameEl.textContent = pl ? pl.name + (state.hakemSeat === s ? ' \u{1F451}' : '') + (state.trick && state.trick.turnSeat === s ? ' \u23F3' : '') : '';
+    const nameEl = $('name-' + posName[rel(s)]);
+    if (nameEl) nameEl.textContent = pl ? pl.name + (state.hakemSeat === s ? ' \u{1F451}' : '') + bidTag(s) + (state.trick && state.trick.turnSeat === s ? ' \u23F3' : '') : '';
   }
-  const me = state.players.find((p) => p.seat === state.mySeat);
-  $('name-bottom').textContent = me ? me.name + (state.hakemSeat === state.mySeat ? ' \u{1F451}' : '') + (state.trick && state.trick.turnSeat === state.mySeat ? ' \u23F3' : '') : '';
   $('roundInfo').textContent = '\u062F\u0633\u062A ' + (state.history.length + 1) + (state.hakemSeat !== null && state.bidAmount ? ' \u00B7 \u062D\u0627\u06A9\u0645 \u0627\u0645\u062A\u06CC\u0627\u0632 ' + state.bidAmount + ' \u062E\u0648\u0627\u0646\u062F\u0647' : '');
   $('trumpInfo').textContent = state.trumpSuit ? '\u062D\u06A9\u0645: ' + SUIT_SYM[state.trumpSuit] : '';
   $('trumpInfo').classList.toggle('hidden', !state.trumpSuit);
@@ -228,7 +266,7 @@ function renderGame(state) {
   if (state.state === 'bidding') {
     $('turnHint').textContent = turnPlayer ? '\u0646\u0648\u0628\u062A \u062E\u0648\u0627\u0646\u062F\u0646: ' + turnPlayer.name : '';
   } else if (state.state === 'kitty') {
-    $('turnHint').textContent = state.hakemSeat === state.mySeat ? '\u0686\u0647\u0627\u0631 \u06A9\u0627\u0631\u062A \u0648\u0633\u0637 \u0631\u0627 \u0628\u0628\u06CC\u0646 \u0648 \u06F4 \u06A9\u0627\u0631\u062A \u0628\u0631\u0627\u06CC \u0632\u06CC\u0631\u0633\u0627\u0632\u06CC \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646\u06CC\u062F' : '\u062D\u0627\u06A9\u0645 \u062F\u0631 \u062D\u0627\u0644 \u0632\u06CC\u0631\u0633\u0627\u0632\u06CC \u0627\u0633\u062A';
+    $('turnHint').textContent = state.hakemSeat === state.mySeat ? 'کارت‌ها را بخوابان' : 'در انتظار کارت خواباندن حاکم';
   } else if (state.state === 'playing') {
     $('turnHint').textContent = turnPlayer ? '\u0646\u0648\u0628\u062A \u0628\u0627\u0632\u06CC: ' + turnPlayer.name : '';
   } else {
@@ -309,6 +347,14 @@ function renderGame(state) {
     const myTurn = state.bidding.turnSeat === state.mySeat;
     const bidderName = (state.players.find((p) => p.seat === state.bidding.turnSeat) || {}).name || '';
     $('bidStatus').textContent = (state.bidding.currentBid ? '\u0628\u0627\u0644\u0627\u062A\u0631\u06CC\u0646 \u0631\u0642\u0645: ' + state.bidding.currentBid + ' \u00B7 ' : '\u06A9\u0633\u06CC \u0646\u062E\u0648\u0627\u0646\u062F\u0647 \u00B7 ') + '\u0646\u0648\u0628\u062A: ' + bidderName;
+    $('bidPlayers').innerHTML = [0, 1, 2, 3].map((k) => {
+      const s = (state.mySeat + k) % 4;
+      const pl = state.players.find((p) => p.seat === s);
+      const v = state.bidding.bids ? state.bidding.bids[s] : null;
+      const turn = state.bidding.turnSeat === s;
+      const txt = v === 'pass' ? 'پاس' : v ? String(v) : (turn ? 'نوبت او' : 'هنوز نخوانده');
+      return `<div class="bid-chip${turn ? ' turn' : ''}${v === 'pass' ? ' passed' : ''}"><b>${escapeHtml(pl ? pl.name : '')}</b><span>${txt}${turn && v ? ' \u23F3' : ''}${turn && !v ? ' \u23F3' : ''}</span></div>`;
+    }).join('');
     const opts = $('bidOptions');
     opts.innerHTML = '';
     for (let v = 100; v <= 165; v += 5) {
@@ -327,7 +373,7 @@ function renderGame(state) {
   $('kittyPanel').classList.toggle('hidden', !inKitty);
   if (inKitty) $('confirmDiscard').disabled = selectedKittyCards.length !== 4;
   else $('confirmDiscard').textContent = '\u062A\u0627\u06CC\u06CC\u062F (\u06F4 \u06A9\u0627\u0631\u062A \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646)';
-  if (inKitty) $('confirmDiscard').textContent = selectedKittyCards.length === 4 ? '\u062A\u0627\u06CC\u06CC\u062F \u0632\u06CC\u0631\u0633\u0627\u0632\u06CC' : `\u0627\u0646\u062A\u062E\u0627\u0628 \u0634\u062F\u0647: ${selectedKittyCards.length}/4`;
+  if (inKitty) $('confirmDiscard').textContent = selectedKittyCards.length === 4 ? 'تایید خواباندن' : `انتخاب شده: ${selectedKittyCards.length}/4`;
 
   // round end panel
   const roundEnd = state.state === 'roundEnd';
@@ -338,18 +384,10 @@ function renderGame(state) {
     const teamName = (t) => state.teamNames[t];
     const resLabel = RESULT_LABELS[last.resultType] || last.resultType;
     $('roundEndText').innerHTML = `<b>${resLabel}</b><br>\u062D\u0627\u06A9\u0645: ${hakemName} (\u062E\u0648\u0627\u0646\u062F\u0647: ${last.bid})<br>\u0627\u0645\u062A\u06CC\u0627\u0632 ${teamName(last.hakemTeam)}: ${last.pointsHakem} (${last.deltaHakem >= 0 ? '+' : ''}${last.deltaHakem})<br>\u0627\u0645\u062A\u06CC\u0627\u0632 ${teamName(last.hakemTeam === 'A' ? 'B' : 'A')}: ${last.pointsOpp} (${last.deltaOpp >= 0 ? '+' : ''}${last.deltaOpp})<br><br>\u062C\u0645\u0639 \u06A9\u0644: ${teamName('A')} = ${state.scores.A} | ${teamName('B')} = ${state.scores.B}`;
-    $('nextRoundBtn').classList.toggle('hidden', !state.isAdmin);
+    $('nextRoundBtn').classList.remove('hidden');
   }
 
-  // chat
-  const chatEl = $('chatMessages');
-  chatEl.innerHTML = state.chat.map((m) => `<div><b>${escapeHtml(m.name)}:</b> ${escapeHtml(m.text)}</div>`).join('');
-  chatEl.scrollTop = chatEl.scrollHeight;
-  const latest = state.chat[state.chat.length - 1];
-  $('chatLatest').textContent = latest ? `${latest.name}: ${latest.text}` : '\u0647\u0646\u0648\u0632 \u067E\u06CC\u0627\u0645\u06CC \u0646\u06CC\u0633\u062A';
-  $('chatBox').classList.toggle('expanded', chatExpanded);
-  $('chatExpanded').classList.toggle('hidden', !chatExpanded);
-  $('chatToggle').setAttribute('aria-expanded', String(chatExpanded));
+  renderChat(state);
 }
 
 function renderScoreModal() {
@@ -358,12 +396,12 @@ function renderScoreModal() {
   const scoreB = Number(lastState.scores.B) || 0;
   const teamAName = escapeHtml(lastState.teamNames.A);
   const teamBName = escapeHtml(lastState.teamNames.B);
-  $('scoreTotals').innerHTML = `<div class="scoreboard-caption"><span>\u0645\u06CC\u0632: \u0628\u0627\u0632\u06CC \u0622\u0646\u0644\u0627\u06CC\u0646</span><b>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0647\u062F\u0641: \u06F1\u06F6\u06F5</b></div><div class="scoreboard-teambar"><div class="scoreboard-team team-a"><small>${teamAName}</small><strong>${scoreA.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div><div class="scoreboard-vs">VS</div><div class="scoreboard-team team-b"><small>${teamBName}</small><strong>${scoreB.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div></div>`;
+  $('scoreTotals').innerHTML = `<div class="scoreboard-teambar"><div class="scoreboard-team team-a"><small>${teamAName}</small><strong>${scoreA.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div><div class="scoreboard-vs">VS</div><div class="scoreboard-team team-b"><small>${teamBName}</small><strong>${scoreB.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div></div>`;
   if (!lastState.history.length) {
     $('scoreHistory').innerHTML = '<div class="empty-history">\u0647\u0646\u0648\u0632 \u062F\u0633\u062A\u06CC \u0628\u0647 \u067E\u0627\u06CC\u0627\u0646 \u0646\u0631\u0633\u06CC\u062F\u0647 \u0627\u0633\u062A.</div>';
     return;
   }
-  let rows = '<div class="history-caption">\u0627\u0645\u062A\u06CC\u0627\u0632 \u0647\u0631 \u0631\u0627\u0648\u0646\u062F\u060C \u062A\u0639\u0647\u062F \u062D\u0627\u06A9\u0645\u060C \u0646\u062A\u06CC\u062C\u0647 \u0648 \u062C\u0645\u0639 \u06A9\u0644 \u0631\u0627 \u062F\u0631 \u06CC\u06A9 \u0633\u0637\u0631 \u0645\u06CC\u200C\u0628\u06CC\u0646\u06CC\u062F.</div><div class="score-table-wrap"><table class="scoreboard-table"><thead><tr><th>\u062F\u0633\u062A</th><th>${escapeHtml(lastState.teamNames.B)}<br><small>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</small></th><th>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0627\u06CC\u0646 \u062F\u0633\u062A</th><th>\u062A\u0639\u0647\u062F \u062D\u0627\u06A9\u0645</th><th>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0627\u06CC\u0646 \u062F\u0633\u062A</th><th>${escapeHtml(lastState.teamNames.A)}<br><small>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</small></th><th>\u0646\u062A\u06CC\u062C\u0647</th></tr></thead><tbody>';
+  let rows = '<div class="score-table-wrap"><table class="scoreboard-table"><thead><tr><th>\u062F\u0633\u062A</th><th>${escapeHtml(lastState.teamNames.B)}<br><small>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</small></th><th>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0627\u06CC\u0646 \u062F\u0633\u062A</th><th>\u062A\u0639\u0647\u062F \u062D\u0627\u06A9\u0645</th><th>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0627\u06CC\u0646 \u062F\u0633\u062A</th><th>${escapeHtml(lastState.teamNames.A)}<br><small>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</small></th><th>\u0646\u062A\u06CC\u062C\u0647</th></tr></thead><tbody>';
   for (const h of lastState.history) {
     const hakemName = (lastState.players.find((p) => p.seat === h.hakemSeat) || {}).name || '';
     const oppTeam = h.hakemTeam === 'A' ? 'B' : 'A';

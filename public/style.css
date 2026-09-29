@@ -325,3 +325,20 @@ button:not(:disabled):hover { filter: brightness(1.08); transform: translateY(-2
   .scoreboard-teambar { padding-left:8px; padding-right:8px; }
   .scoreboard-table { min-width:790px !important; }
 }
+
+/* Bid status chips */
+.bid-players { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:8px; }
+.bid-chip { display:flex; flex-direction:column; min-width:78px; padding:5px 9px; border-radius:8px; background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.14); font-size:12px; }
+.bid-chip span { opacity:.85; font-size:11px; }
+.bid-chip.turn { border-color:var(--gold-bright); background:rgba(231,189,98,.18); }
+.bid-chip.passed { opacity:.55; }
+
+/* Compact chat: small button, transient bubble, top-anchored panel (never covers hand/table centre) */
+#chatBox { position:fixed; z-index:60; top:12px; left:118px; right:auto; bottom:auto; width:auto; padding:0; background:none; border:none; box-shadow:none; backdrop-filter:none; border-radius:0; }
+#chatToggle { position:relative; width:40px; height:40px; padding:0; border-radius:50%; font-size:18px; display:flex; align-items:center; justify-content:center; background:rgba(5,27,24,.92); color:#fff; border:1px solid rgba(231,189,98,.5); }
+#chatBadge { position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:#e0464f; color:#fff; font-size:11px; line-height:18px; text-align:center; box-shadow:none; }
+#chatLatest { position:fixed; top:58px; left:8px; width:max-content; max-width:min(280px, calc(100vw - 16px)); padding:7px 10px; border-radius:10px; background:rgba(255,248,225,.96); color:#1b1b1b; font-size:12px; font-weight:normal; white-space:normal; overflow-wrap:anywhere; overflow:visible; text-overflow:clip; box-shadow:0 4px 14px rgba(0,0,0,.3); pointer-events:none; }
+#chatExpanded { position:fixed; top:58px; left:8px; width:min(320px, calc(100vw - 16px)); padding:8px; border-radius:12px; background:rgba(5,27,24,.94); border:1px solid rgba(231,189,98,.3); box-shadow:0 8px 24px rgba(0,0,0,.4); }
+#chatMessages { max-height:min(180px, 24vh); color:#f4f1e6; margin-bottom:6px; }
+#chatMessages b { color:#ffd47b; }
+.chat-input input { min-width:0; }

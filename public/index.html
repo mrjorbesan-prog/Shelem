@@ -56,13 +56,14 @@
   </div>
 
   <div id="biddingPanel" class="panel hidden">
+    <div id="bidPlayers" class="bid-players"></div>
     <div id="bidStatus"></div>
     <div id="bidOptions" class="bid-options"></div>
     <button id="passBtn">&#x067E;&#x0627;&#x0633;</button>
   </div>
 
   <div id="kittyPanel" class="panel hidden">
-    <p>&#x06F4; &#x06A9;&#x0627;&#x0631;&#x062A; &#x0631;&#x0627; &#x0628;&#x0631;&#x0627;&#x06CC; &#x0632;&#x06CC;&#x0631;&#x0633;&#x0627;&#x0632;&#x06CC; &#x0627;&#x0646;&#x062A;&#x062E;&#x0627;&#x0628; &#x06A9;&#x0646; (&#x06A9;&#x0644;&#x06CC;&#x06A9; &#x06A9;&#x0646; &#x062A;&#x0627; &#x0627;&#x0646;&#x062A;&#x062E;&#x0627;&#x0628;/&#x0644;&#x063A;&#x0648; &#x0627;&#x0646;&#x062A;&#x062E;&#x0627;&#x0628; &#x0634;&#x0648;&#x062F;):</p>
+    <p>۴ کارت را برای خواباندن انتخاب کن (کلیک کن تا انتخاب/لغو شود):</p>
     <button id="confirmDiscard" disabled>&#x062A;&#x0627;&#x06CC;&#x06CC;&#x062F; (&#x06F4; &#x06A9;&#x0627;&#x0631;&#x062A; &#x0627;&#x0646;&#x062A;&#x062E;&#x0627;&#x0628; &#x06A9;&#x0646;)</button>
   </div>
 
@@ -77,15 +78,13 @@
   </div>
 
   <div id="chatBox">
-    <button id="chatToggle" type="button" aria-expanded="false">
-      <span class="chat-title">&#x1F4AC; &#x0686;&#x062A;</span>
-      <span id="chatLatest">&#x0647;&#x0646;&#x0648;&#x0632; &#x067E;&#x06CC;&#x0627;&#x0645;&#x06CC; &#x0646;&#x06CC;&#x0633;&#x062A;</span>
-    </button>
+    <button id="chatToggle" type="button" aria-expanded="false" aria-label="چت">&#x1F4AC;<span id="chatBadge" class="hidden"></span></button>
+    <div id="chatLatest" class="hidden"></div>
     <div id="chatExpanded" class="hidden">
       <div id="chatMessages"></div>
       <div class="chat-input">
-        <input id="chatInput" placeholder="&#x067E;&#x06CC;&#x0627;&#x0645; &#x0633;&#x0631;&#x06CC;&#x0639;...">
-        <button id="chatSend">&#x0627;&#x0631;&#x0633;&#x0627;&#x0644;</button>
+        <input id="chatInput" placeholder="پیام سریع..." maxlength="200">
+        <button id="chatSend">ارسال</button>
       </div>
     </div>
   </div>
