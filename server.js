@@ -159,7 +159,17 @@ function removePlayerFromRoom(room, clientId) {
     const nextAdmin = room.players.find((player) => player.connected) || room.players[0];
     room.adminClientId = nextAdmin ? nextAdmin.clientId : null;
   }
-  if (room.state !== 'lobby') moveRoomToLobby(room);
+  if (room.state !== 'lobby') {
+    if (['bidding', 'kitty', 'playing', 'roundEnd'].includes(room.state)) {
+      // بازی متوقف می‌شود (کاملاً حفظ می‌شود) و بعد از ورود بازیکن جدید از همانجا ادامه می‌یابد
+      room.saved = room.state;
+      room.state = 'lobby';
+      for (const player of room.players) player.ready = player.clientId === room.adminClientId;
+    } else {
+      room.scores = { A: 0, B: 0 }; room.history = []; room.roundNo = 0;
+      moveRoomToLobby(room);
+    }
+  }
   return true;
 }
 
@@ -211,6 +221,7 @@ function stateFor(room, clientId) {
     kittyReveal: room.state === 'kitty' && room.hakemSeat === mySeat ? room.kittyReveal : [],
     needsDiscard: room.state === 'kitty',
     chat: room.chat.slice(-50),
+    paused: Boolean(room.saved),
     targetScore: room.targetScore,
     winnerTeam: room.winnerTeam,
     lastTrick: room.lastTrick,
@@ -452,7 +463,7 @@ io.on('connection', (socket) => {
 
   socket.on('swapSeats', ({ seatA, seatB }) => {
     const room = rooms[socket.data.roomId];
-    if (!room || room.state !== 'lobby') return;
+    if (!room || room.saved) return;
     if (getPlayer(room, socket.data.clientId).clientId !== room.adminClientId) return;
     const pa = room.players.find((p) => p.seat === seatA);
     const pb = room.players.find((p) => p.seat === seatB);
@@ -489,6 +500,24 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
+  socket.on('kickPlayer', ({ seat }) => {
+    const room = rooms[socket.data.roomId];
+    if (!room) return;
+    if (socket.data.clientId !== room.adminClientId) return;
+    const target = room.players.find((p) => p.seat === seat);
+    if (!target || target.clientId === room.adminClientId) return;
+    const ts = target.socketId && io.sockets.sockets.get(target.socketId);
+    if (ts) {
+      ts.leave(room.id);
+      ts.data.roomId = null;
+      ts.data.clientId = null;
+      ts.emit('leftRoom');
+      ts.emit('kicked');
+    }
+    removePlayerFromRoom(room, target.clientId);
+    broadcast(room);
+  });
+
   socket.on('toggleReady', () => {
     const room = rooms[socket.data.roomId];
     if (!room || room.state !== 'lobby') return;
@@ -504,6 +533,16 @@ io.on('connection', (socket) => {
     if (socket.data.clientId !== room.adminClientId) return;
     if (room.players.length < 4) return;
     if (!room.players.every((p) => p.clientId === room.adminClientId || p.ready)) return;
+    if (room.saved) {
+      room.state = room.saved;
+      room.saved = null;
+      for (const player of room.players) player.ready = player.clientId === room.adminClientId;
+      if (room.trick && room.trick.cards.length === 4) {
+        try { resolveTrick(room, room.trick); } catch (e) { console.error('resume resolveTrick', e); }
+      }
+      broadcast(room);
+      return;
+    }
     startDeal(room);
     broadcast(room);
   });
