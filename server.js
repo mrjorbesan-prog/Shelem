@@ -547,6 +547,14 @@ io.on('connection', (socket) => {
     if (!p || p.seat !== b.turnSeat) return;
     b.active[p.seat] = false;
     b.bids[p.seat] = 'pass';
+    // قانون سه پاس: اگر سه نفر اول همه پاس دادند، کارت‌ها دوباره تقسیم می‌شود و خوانش از همان نفر شروع می‌شود
+    if (b.currentBid === 0 && b.bids.filter((v) => v === 'pass').length === 3) {
+      room.roundNo -= 1; // شماره دست نمی‌رود جلو
+      startDeal(room);
+      io.to(room.id).emit('notice', { type: 'redeal', text: 'هر سه نفر اول پاس دادند — کارت‌ها دوباره تقسیم شد' });
+      broadcast(room);
+      return;
+    }
     const act = activeSeats(b);
     if (act.length >= 1) {
       let s = nextSeat(b.turnSeat);
