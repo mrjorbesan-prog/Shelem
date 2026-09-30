@@ -589,3 +589,31 @@ body.has-conn-bar #game { padding-top:34px; }
 #game .table-trump small { font-size:10px; color:#ffe4a4; line-height:1.2; letter-spacing:.3px; }
 #game .tsuit { width:auto; height:auto; background:none; border-radius:0; box-shadow:none; font-size:30px; line-height:1.05; color:#f4f6fb; text-shadow:0 0 10px rgba(255,255,255,.35); }
 #game .tsuit.red { color:#ff5a66; text-shadow:0 0 10px rgba(255,90,102,.55); }
+
+/* ===== v8: drag to play, selected-card clearance, quick chat, kick, admin ===== */
+#game .hand .card { touch-action:none; }
+#game .hand .card.dragging { z-index:70; transition:none; box-shadow:0 18px 30px rgba(0,0,0,.55), 0 0 0 2px #ffd36b; }
+#game .table.drop-ready { box-shadow:inset 0 0 0 4px rgba(255,211,107,.85), inset 0 0 60px rgba(255,211,107,.25), 0 14px 36px rgba(0,0,0,.45); }
+#myArea { position:relative; z-index:20; }
+#name-bottom { margin-bottom:0; }
+#game .hand { padding-top:40px; height:calc(var(--cw) * 1.42 + 62px); }
+.quick-chat { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:6px; }
+.quick-chat button { padding:5px 10px; font-size:12px; border-radius:14px; background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.22); box-shadow:none; }
+.kick-btn { position:absolute; top:4px; left:4px; width:22px; height:22px; padding:0; border-radius:50%; font-size:11px; line-height:22px; background:#8a2a34; color:#fff; border:none; box-shadow:none; }
+.seatbox { position:relative; }
+.paused-note { margin:8px auto; max-width:420px; padding:8px 12px; border-radius:10px; background:rgba(154,106,18,.35); border:1px solid rgba(231,189,98,.5); color:#ffe4a4; font-size:13px; text-align:center; }
+.admin-btn { padding:6px 10px; font-size:12px; border-radius:10px; background:rgba(8,12,30,.85); color:#ffe4a4; border:1px solid rgba(231,189,98,.45); box-shadow:none; }
+#game .round-status { display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; }
+#game .round-status > * { flex:0 0 auto; width:auto; margin:0; }
+#game .round-status .turn-hint, #game .round-status .admin-btn { max-width:100%; }
+/* topbar: items wrap naturally, never stretch full width */
+#game .topbar { display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; gap:6px 8px; }
+#game .topbar > .turn-hint, #game .topbar > .admin-btn { position:static; flex:0 0 auto; width:auto; max-width:100%; margin:0; padding:5px 10px; border-radius:10px; background:rgba(8,12,30,.85); border:1px solid rgba(231,189,98,.45); color:#ffe4a4; font-size:12px; text-align:center; }
+#game .topbar > .turn-hint:empty { display:none; }
+#game .round-heading { display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; gap:6px 8px; }
+#game .round-heading > * { flex:0 0 auto; width:auto; max-width:100%; margin:0; }
+#game .round-heading > .turn-hint, #game .round-heading > .admin-btn { position:static; padding:5px 10px; border-radius:10px; background:rgba(8,12,30,.85); border:1px solid rgba(231,189,98,.45); color:#ffe4a4; font-size:12px; text-align:center; }
+#game .round-heading > .turn-hint:empty { display:none; }
+#game .round-status { width:100%; }
+#game .round-heading { flex:1 1 0; min-width:0; }
+#game .round-heading > #roundInfo { flex:1 1 auto; }

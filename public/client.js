@@ -63,7 +63,7 @@ $('nextRoundBtn').onclick = () => socket.emit('nextRound');
 $('leaveRoomBtn').onclick = () => {
   if (!lastState) return;
   const unfinishedRound = !['lobby', 'roundEnd', 'gameOver'].includes(lastState.state);
-  if (unfinishedRound && !window.confirm('\u0628\u0627 \u062E\u0631\u0648\u062C \u0634\u0645\u0627\u060C \u062F\u0633\u062A \u0646\u0627\u062A\u0645\u0627\u0645 \u0644\u063A\u0648 \u0648 \u0631\u0648\u0645 \u0628\u0647 \u0644\u0627\u0628\u06CC \u0628\u0631\u0645\u06CC\u200C\u06AF\u0631\u062F\u062F. \u0627\u062F\u0627\u0645\u0647 \u0645\u06CC\u200C\u062F\u0647\u06CC\u062F\u061F')) return;
+  if (unfinishedRound && !window.confirm('با خروج شما، بازی متوقف می‌شود و روم به لابی می‌رود؛ با ورود بازیکن جدید، بازی از همین‌جا ادامه پیدا می‌کند. خارج می‌شوید؟')) return;
   $('leaveRoomBtn').disabled = true;
   socket.emit('leaveRoom');
 };
@@ -74,6 +74,40 @@ $('confirmDiscard').onclick = () => {
   selectedKittyCards = [];
 };
 $('scoreBtn').onclick = () => { $('scoreModal').classList.remove('hidden'); renderScoreModal(); };
+let adminPick = [];
+function renderAdmin() {
+  const st = lastState;
+  if (!st) return;
+  const box = $('adminSeats');
+  box.innerHTML = '';
+  for (let s = 0; s < 4; s++) {
+    const pl = st.players.find((p) => p.seat === s);
+    const el = document.createElement('div');
+    el.className = 'seatbox' + (adminPick.includes(s) ? ' selected' : '');
+    el.innerHTML = `<div class="tag">صندلی ${s + 1} · ${escapeHtml(st.teamNames[s % 2 === 0 ? 'A' : 'B'])}</div><div>${pl ? escapeHtml(pl.name) : '— خالی —'}</div>`;
+    if (pl) {
+      el.onclick = () => {
+        adminPick.push(s);
+        if (adminPick.length === 2) {
+          if (adminPick[0] !== adminPick[1]) socket.emit('swapSeats', { seatA: adminPick[0], seatB: adminPick[1] });
+          adminPick = [];
+        }
+        renderAdmin();
+      };
+      if (!pl.isAdmin) {
+        const kb = el.appendChild(document.createElement('button'));
+        kb.className = 'kick-btn'; kb.type = 'button'; kb.textContent = '✖';
+        kb.onclick = (ev) => {
+          ev.stopPropagation();
+          if (window.confirm(`${pl.name} از روم خارج شود؟ بازی متوقف می‌شود تا بازیکن جدید بیاید.`)) { socket.emit('kickPlayer', { seat: s }); $('adminModal').classList.add('hidden'); }
+        };
+      }
+    }
+    box.appendChild(el);
+  }
+}
+$('adminBtn').onclick = () => { adminPick = []; renderAdmin(); $('adminModal').classList.remove('hidden'); };
+$('closeAdmin').onclick = () => $('adminModal').classList.add('hidden');
 $('closeScore').onclick = () => $('scoreModal').classList.add('hidden');
 $('chatSend').onclick = sendChat;
 $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
@@ -90,6 +124,16 @@ function sendChat() {
   socket.emit('chatMessage', { text: v });
   $('chatInput').value = '';
 }
+const QUICK = ['دستخوش!', 'بنازم!', 'اینکاره نیستی!', 'نوبی!', 'بدو!', 'دست بجنبون.'];
+(() => {
+  const q = document.getElementById('quickChat');
+  QUICK.forEach((t) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = t;
+    b.onclick = () => { socket.emit('chatMessage', { text: t }); setChatExpanded(false); };
+    q.appendChild(b);
+  });
+})();
 let chatExpanded = false, chatSeenT = null, chatKey = '', chatBubbleTimer = null;
 function setChatExpanded(expanded) {
   chatExpanded = expanded;
@@ -106,15 +150,16 @@ function setChatExpanded(expanded) {
 function renderChat(state) {
   const msgs = state.chat || [];
   const latest = msgs[msgs.length - 1];
+  const isFirstChatRender = chatSeenT === null;
   if (chatSeenT === null) chatSeenT = latest ? latest.t : 0;
   const key = latest ? latest.t + '|' + msgs.length : '';
   if (key !== chatKey) {
-    const firstRender = chatKey === '' && !latest ? false : chatKey === '';
+    const firstRender = isFirstChatRender;
     chatKey = key;
     const el = $('chatMessages');
     el.innerHTML = msgs.map((m) => `<div><b>${escapeHtml(m.name)}:</b> ${escapeHtml(m.text)}</div>`).join('');
     el.scrollTop = el.scrollHeight;
-    if (latest && !firstRender && !chatExpanded && latest.seat !== state.mySeat) {
+    if (latest && !firstRender && !chatExpanded) {
       const bubble = $('chatLatest');
       bubble.textContent = `${latest.name}: ${latest.text}`;
       bubble.classList.remove('hidden');
@@ -144,6 +189,7 @@ function toast(text) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
 }
+socket.on('kicked', () => toast('مدیر روم شما را از روم خارج کرد'));
 socket.on('notice', (n) => { toast(n.text); if (n.type === 'redeal') Sfx.play('deal'); });
 function paintAudio() {
   $('musicBtn').classList.toggle('off', !Sfx.music);
@@ -343,7 +389,12 @@ function renderLobby(state) {
       ? (pl.isAdmin ? '⚙️ ' : '') + escapeHtml(pl.name) + (pl.ready || pl.isAdmin ? ' ✅' : '') + (pl.connected === false ? ' <small>⚠️ قطع</small>' : '')
       : '— خالی —';
     box.innerHTML = `<div class="tag">صندلی ${s + 1} · ${team}</div><div>${who}</div>`;
-    if (state.isAdmin) {
+    if (state.isAdmin && pl && !pl.isAdmin) {
+      const kb = box.appendChild(document.createElement('button'));
+      kb.className = 'kick-btn'; kb.type = 'button'; kb.textContent = '✖'; kb.title = 'اخراج';
+      kb.onclick = (ev) => { ev.stopPropagation(); if (window.confirm(`${pl.name} از روم خارج شود؟`)) socket.emit('kickPlayer', { seat: s }); };
+    }
+    if (state.isAdmin && !state.paused) {
       box.onclick = () => {
         selectedSeats.push(s);
         if (selectedSeats.length === 2) {
@@ -361,6 +412,8 @@ function renderLobby(state) {
   const me = state.players.find((p) => p.seat === state.mySeat);
   $('readyBtn').classList.toggle('hidden', state.isAdmin || !me);
   if (me) $('readyBtn').textContent = me.ready ? 'آماده‌ام ✅ (لغو)' : 'آماده‌ام';
+  $('pausedNote').classList.toggle('hidden', !state.paused);
+  $('startBtn').textContent = state.paused ? 'ادامه بازی' : 'شروع بازی';
   $('startBtn').classList.toggle('hidden', !state.isAdmin);
   $('startBtn').disabled = state.players.length < 4 || !state.players.every((p) => p.isAdmin || p.ready);
 }
@@ -439,6 +492,8 @@ function renderGame(state) {
   const offCount = state.players.filter((p) => !p.connected && p.seat !== state.mySeat).length;
   prevOffline = offCount;
   renderFans(state);
+  $('adminBtn').classList.toggle('hidden', !state.isAdmin);
+  if (!$('adminModal').classList.contains('hidden')) renderAdmin();
 
   if (state.state === 'bidding') {
     $('turnHint').textContent = myActive ? 'نوبت خوانش شماست' : turnPlayer ? 'نوبت خواندن: ' + turnPlayer.name : '';
@@ -594,6 +649,51 @@ function layoutHand() {
   handEl.style.setProperty('--ov', Math.max(0, cw - step) + 'px');
 }
 window.addEventListener('resize', layoutHand);
+let lastDragHint = 0;
+function attachDrag(el, card) {
+  let drag = null;
+  const reset = () => { el.classList.remove('dragging'); el.style.translate = ''; el.style.rotate = ''; el.style.visibility = ''; $('table').classList.remove('drop-ready'); };
+  const inTable = (e) => { const r = $('table').getBoundingClientRect(); return e.clientX > r.left && e.clientX < r.right && e.clientY > r.top && e.clientY < r.bottom; };
+  el.addEventListener('pointerdown', (e) => {
+    const st = lastState;
+    if (!st || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const myTurn = st.state === 'playing' && st.trick && st.trick.turnSeat === st.mySeat && st.trick.cards.length < 4;
+    if (!myTurn) return;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, legal: el.classList.contains('playable') };
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved) {
+      if (Math.hypot(dx, dy) < 8) return;
+      drag.moved = true;
+      if (!drag.legal) { Sfx.play('deny'); el.classList.remove('deny'); void el.offsetWidth; el.classList.add('deny'); return; }
+      el.classList.add('dragging');
+    }
+    if (!drag.legal) return;
+    el.style.translate = `${dx}px ${dy}px`;
+    el.style.rotate = '0deg';
+    $('table').classList.toggle('drop-ready', inTable(e));
+  });
+  const finish = (e, cancelled) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null;
+    if (d.moved && d.legal && !cancelled && inTable(e)) {
+      socket.emit('playCard', { cardId: card.id });
+      el.style.visibility = 'hidden';
+      $('table').classList.remove('drop-ready');
+      setTimeout(() => { if (el.isConnected) reset(); }, 1500);
+    } else {
+      reset();
+      if (!d.moved && d.legal && Date.now() - lastDragHint > 15000) { lastDragHint = Date.now(); toast('کارت را بکش و روی میز رها کن'); }
+    }
+  };
+  el.addEventListener('pointerup', (e) => finish(e, false));
+  el.addEventListener('pointercancel', (e) => finish(e, true));
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
 function renderHand(state, inKitty) {
   const handEl = $('myHand');
   const myTurnToPlay = state.state === 'playing' && state.trick && state.trick.turnSeat === state.mySeat && state.trick.cards.length < 4;
@@ -613,6 +713,7 @@ function renderHand(state, inKitty) {
       el.innerHTML = cardHTML(card);
       el.className = 'card deal-in' + (isRed(card) ? ' red' : '');
       el.addEventListener('animationend', () => el.classList.remove('deal-in'));
+      attachDrag(el, card);
     }
     const d = idx - (n - 1) / 2;
     el.style.setProperty('--i', idx);
@@ -625,16 +726,11 @@ function renderHand(state, inKitty) {
     el.classList.toggle('clickable', inKitty || isLegal);
     el.onclick = () => {
       if (inKitty) {
-        const i = selectedKittyCards.indexOf(card.id);
-        if (i >= 0) selectedKittyCards.splice(i, 1);
+        const i2 = selectedKittyCards.indexOf(card.id);
+        if (i2 >= 0) selectedKittyCards.splice(i2, 1);
         else if (selectedKittyCards.length < 4) selectedKittyCards.push(card.id);
         Sfx.play('tick');
         if (lastState) renderGame(lastState);
-      } else if (isLegal) {
-        socket.emit('playCard', { cardId: card.id });
-      } else if (myTurnToPlay) {
-        Sfx.play('deny');
-        el.classList.remove('deny'); void el.offsetWidth; el.classList.add('deny');
       }
     };
     if (handEl.children[idx] !== el) handEl.insertBefore(el, handEl.children[idx] || null);

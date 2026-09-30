@@ -24,6 +24,7 @@
 
 <div id="lobby" class="screen hidden">
   <h2>&#x0631;&#x0648;&#x0645;: <span id="lobbyRoomId"></span></h2>
+  <div id="pausedNote" class="paused-note hidden">بازی در حال اجرا متوقف شده؛ بعد از پر شدن جای خالی، «ادامه بازی» را بزنید تا از همان‌جا ادامه پیدا کند.</div>
   <div id="seats" class="seats"></div>
   <div id="teamNameEditor" class="hidden">
     <label>&#x0627;&#x0633;&#x0645; &#x062A;&#x06CC;&#x0645; &#x06F1; (&#x062E;&#x0627;&#x0646;&#x0647;&#x200C;&#x0647;&#x0627;&#x06CC; &#x06F1;&#x0648;&#x06F3;): <input id="teamAName"></label>
@@ -45,7 +46,8 @@
       <div class="round-heading">
         <span class="eyebrow">&#x062C;&#x0631;&#x06CC;&#x0627;&#x0646; &#x0628;&#x0627;&#x0632;&#x06CC;</span>
         <strong id="roundInfo"></strong>
-        <div id="turnHint" class="turn-hint"></div>
+        <button id="adminBtn" class="admin-btn hidden" type="button">⚙️ مدیریت</button>
+  <div id="turnHint" class="turn-hint"></div>
   </div>
       <button id="scoreBtn">&#x1F4CA; &#x062C;&#x062F;&#x0648;&#x0644; &#x062F;&#x0633;&#x062A;&#x200C;&#x0647;&#x0627;</button>
     </div>
@@ -100,6 +102,7 @@
     <div id="chatLatest" class="hidden"></div>
     <div id="chatExpanded" class="hidden">
       <div id="chatMessages"></div>
+      <div id="quickChat" class="quick-chat"></div>
       <div class="chat-input">
         <input id="chatInput" placeholder="پیام سریع..." maxlength="200">
         <button id="chatSend">ارسال</button>
@@ -111,6 +114,14 @@
 <div class="audio-btns"><button id="musicBtn" type="button" aria-label="موزیک">🎵</button><button id="sfxBtn" type="button" aria-label="افکت صوتی">🔊</button></div>
 <div id="toast" class="toast hidden" role="status"></div>
 
+<div id="adminModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>مدیریت بازیکنان</h3>
+    <p class="hint">برای جابجایی، روی دو بازیکن بزنید. کارت‌ها به صندلی تعلق دارند و با جابجایی، دست‌ها هم عوض می‌شوند. اخراج وسط بازی، بازی را متوقف می‌کند تا بازیکن جدید جایگزین شود.</p>
+    <div id="adminSeats" class="seats"></div>
+    <div class="modal-actions"><button id="closeAdmin" type="button">بستن</button></div>
+  </div>
+</div>
 <div id="scoreModal" class="modal hidden">
   <div class="modal-content">
     <div class="modal-heading">
