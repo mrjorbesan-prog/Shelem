@@ -410,7 +410,7 @@ function renderGame(state) {
     const ot = ht === 'A' ? 'B' : 'A';
     const rp = state.roundPoints || { A: 0, B: 0 };
     const mineHakem = (ht === 'A') === (state.mySeat % 2 === 0);
-    $('trumpInfo').innerHTML = `<span class="tsuit ${state.trumpSuit === 'H' || state.trumpSuit === 'D' ? 'red' : ''}">${SUIT_CH[state.trumpSuit]}</span>`;
+    $('trumpInfo').innerHTML = `<small>حکم</small><span class="tsuit ${state.trumpSuit === 'H' || state.trumpSuit === 'D' ? 'red' : ''}">${SUIT_CH[state.trumpSuit]}</span>`;
   }
   $('trumpInfo').classList.toggle('hidden', !state.trumpSuit);
   const turnPlayer = state.players.find((player) => player.seat === activeSeat);
@@ -452,12 +452,10 @@ function renderGame(state) {
 
   for (const team of ['A', 'B']) {
     const teamEl = $('teamTricks' + team);
-    const anchorSeat = team === 'A' ? 0 : 1;
-    const position = POS[rel(anchorSeat)];
+    const mine = (team === 'A') === (state.mySeat % 2 === 0);
     const count = state.tricksWon ? state.tricksWon[team] : 0;
-    teamEl.className = 'team-tricks at-' + position;
-    const pile = count ? `<div class="trick-pile" aria-hidden="true">${Array.from({ length: count }, (_, i) => `<span class="trick-pile-card" style="--stack-index:${i}"></span>`).join('')}</div>` : '';
-    teamEl.innerHTML = `${pile}<div class="team-tricks-label"><span>${escapeHtml(state.teamNames[team])}</span><b>${faNum(count)} دست</b></div>`;
+    teamEl.className = 'team-tricks ' + (mine ? 'mine' : 'opp') + (count ? '' : ' empty');
+    teamEl.innerHTML = `<div class="pile-card"><b>${faNum(count)}</b></div><span>${escapeHtml(state.teamNames[team])}</span>`;
   }
 
   // trick area (فقط وقتی محتوا عوض شد بازسازی می‌شود تا انیمیشن‌ها تکرار نشوند)
