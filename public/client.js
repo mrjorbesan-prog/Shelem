@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ reconnectionDelayMax: 3000 });
 let clientId = localStorage.getItem('shelem_clientId');
 if (!clientId) { clientId = Math.random().toString(36).slice(2) + Date.now(); localStorage.setItem('shelem_clientId', clientId); }
 let myName = localStorage.getItem('shelem_name') || '';
@@ -55,14 +55,14 @@ function getChosenName() {
   return name.slice(0, 16);
 }
 $('nameInput').addEventListener('input', () => { $('homeError').textContent = ''; });
-socket.on('errorMsg', (msg) => { $('homeError').textContent = msg; });
+socket.on('errorMsg', (msg) => { awaitingState = false; clearTimeout(rejoinTimer); updateConnBar(); $('homeError').textContent = msg; });
 
 $('readyBtn').onclick = () => socket.emit('toggleReady');
 $('startBtn').onclick = () => socket.emit('startGame');
 $('nextRoundBtn').onclick = () => socket.emit('nextRound');
 $('leaveRoomBtn').onclick = () => {
   if (!lastState) return;
-  const unfinishedRound = !['lobby', 'roundEnd'].includes(lastState.state);
+  const unfinishedRound = !['lobby', 'roundEnd', 'gameOver'].includes(lastState.state);
   if (unfinishedRound && !window.confirm('\u0628\u0627 \u062E\u0631\u0648\u062C \u0634\u0645\u0627\u060C \u062F\u0633\u062A \u0646\u0627\u062A\u0645\u0627\u0645 \u0644\u063A\u0648 \u0648 \u0631\u0648\u0645 \u0628\u0647 \u0644\u0627\u0628\u06CC \u0628\u0631\u0645\u06CC\u200C\u06AF\u0631\u062F\u062F. \u0627\u062F\u0627\u0645\u0647 \u0645\u06CC\u200C\u062F\u0647\u06CC\u062F\u061F')) return;
   $('leaveRoomBtn').disabled = true;
   socket.emit('leaveRoom');
@@ -133,18 +133,74 @@ function renderChat(state) {
 $('teamAName').addEventListener('change', () => socket.emit('setTeamName', { team: 'A', name: $('teamAName').value }));
 $('teamBName').addEventListener('change', () => socket.emit('setTeamName', { team: 'B', name: $('teamBName').value }));
 
-socket.on('connect', () => {
+const POS = { 0: 'bottom', 1: 'right', 2: 'top', 3: 'left' };
+const faNum = (n) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
+const relPos = (seat) => (seat - lastState.mySeat + 4) % 4; // 0 me, 1 right, 2 top, 3 left
+
+let everConnected = false, awaitingState = false, rejoinTimer = null;
+let collectingUntil = 0, collectTimer = null;
+let renderedTrickIds = new Set(), trickSeeded = false;
+let gameOverShownKey = -1;
+
+function rejoin() {
   const rid = (lastState && lastState.roomId) || localStorage.getItem('shelem_roomId');
   const nm = myName || localStorage.getItem('shelem_name');
-  if (rid && nm) socket.emit('joinRoom', { clientId, name: nm, roomId: rid });
+  if (!rid || !nm || !socket.connected) return;
+  awaitingState = true;
+  socket.emit('joinRoom', { clientId, name: nm, roomId: rid });
+  clearTimeout(rejoinTimer);
+  rejoinTimer = setTimeout(() => { if (awaitingState && socket.connected) rejoin(); }, 6000);
+  updateConnBar();
+}
+function updateConnBar() {
+  const bar = $('connBar');
+  let msg = '', cls = '';
+  const offline = (everConnected && !socket.connected) || navigator.onLine === false;
+  if (offline) {
+    msg = '🔴 اتصال شما قطع شده؛ در حال اتصال مجدد...';
+    cls = 'bad';
+  } else if (awaitingState) {
+    msg = '🟡 اتصال برقرار شد؛ در حال همگام‌سازی با میز...';
+    cls = 'warn';
+  } else if (lastState) {
+    const off = lastState.players.filter((p) => !p.connected && p.seat !== lastState.mySeat).map((p) => p.name);
+    if (off.length) {
+      msg = `🟠 ${off.join('، ')} ${off.length > 1 ? 'قطع شده‌اند' : 'قطع شده'}؛ بازی تا بازگشت منتظر می‌ماند`;
+      cls = 'warn';
+    }
+  }
+  bar.textContent = msg;
+  bar.className = 'conn-bar ' + cls + (msg ? '' : ' hidden');
+  document.body.classList.toggle('has-conn-bar', Boolean(msg));
+}
+socket.on('connect', () => { everConnected = true; rejoin(); updateConnBar(); });
+socket.on('disconnect', (reason) => {
+  if (reason === 'io server disconnect') socket.connect();
+  updateConnBar();
+});
+socket.on('connect_error', updateConnBar);
+socket.io.on('reconnect_attempt', updateConnBar);
+window.addEventListener('online', () => { socket.connect(); updateConnBar(); });
+window.addEventListener('offline', updateConnBar);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!socket.connected) socket.connect();
+  else if (lastState) rejoin(); // همگام‌سازی مجدد بعد از برگشتن به صفحه
+  updateConnBar();
 });
 setInterval(() => { fetch('/health').catch(() => {}); }, 4 * 60 * 1000);
+
 socket.on('state', (state) => {
+  awaitingState = false;
+  clearTimeout(rejoinTimer);
   lastState = state;
   localStorage.setItem('shelem_roomId', state.roomId);
   try { render(state); } catch (e) { console.error(e); }
+  updateConnBar();
 });
 socket.on('leftRoom', () => {
+  awaitingState = false;
+  clearTimeout(rejoinTimer);
   localStorage.removeItem('shelem_roomId');
   $('roomInput').value = '';
   $('leaveRoomBtn').disabled = false;
@@ -159,14 +215,24 @@ socket.on('leftRoom', () => {
   selectedKittyCards = [];
   setChatExpanded(false);
   chatSeenT = null; chatKey = '';
+  $('myHand').innerHTML = '';
+  $('trickArea').innerHTML = '';
+  $('trickArea').dataset.sig = '';
+  renderedTrickIds = new Set(); trickSeeded = false; gameOverShownKey = -1;
+  updateConnBar();
 });
 
-socket.on('trickResult', ({ winnerSeat, points, trickNumber, wasCut }) => {
+socket.on('trickResult', ({ winnerSeat, points, trickNumber }) => {
   if (!lastState) return;
-  if (wasCut) triggerTableShake();
+  // جمع شدن نرم کارت‌ها به سمت برنده دست
+  const pos = POS[relPos(winnerSeat)];
+  $('trickArea').querySelectorAll('.trick-card').forEach((el) => el.classList.add('collect', 'to-' + pos));
+  collectingUntil = Date.now() + 460;
+  clearTimeout(collectTimer);
+  collectTimer = setTimeout(() => { collectingUntil = 0; if (lastState) renderGame(lastState); }, 480);
   const winner = lastState.players.find((player) => player.seat === winnerSeat);
   const feedback = $('trickFeedback');
-  feedback.innerHTML = `<strong>دست ${Number(trickNumber).toLocaleString('fa-IR')}</strong><span>${winner ? escapeHtml(winner.name) : ''} · ${Number(points).toLocaleString('fa-IR')} امتیاز</span>`;
+  feedback.innerHTML = `<strong>دست ${faNum(trickNumber)}</strong><span>${winner ? escapeHtml(winner.name) : ''} · ${faNum(points)} امتیاز</span>`;
   feedback.classList.remove('hidden');
   feedback.classList.remove('feedback-in');
   void feedback.offsetWidth;
@@ -174,6 +240,22 @@ socket.on('trickResult', ({ winnerSeat, points, trickNumber, wasCut }) => {
   clearTimeout(trickFeedbackTimer);
   trickFeedbackTimer = setTimeout(() => feedback.classList.add('hidden'), 1700);
 });
+
+// قانون خال‌تبعیت؛ دقیقاً مطابق سرور
+function legalCards(hand, trick) {
+  if (!trick || trick.cards.length === 0 || trick.cards.length >= 4) return hand.slice();
+  const lead = trick.cards[0].card.suit;
+  return hand.some((c) => c.suit === lead) ? hand.filter((c) => c.suit === lead) : hand.slice();
+}
+// آیا کارت شماره i برش است؟ (اولین برش با حکم، یا برش بالاتر روی برش قبلی)
+function isCutPlay(cards, i, trump) {
+  if (!trump || i === 0) return false;
+  const lead = cards[0].card.suit;
+  const c = cards[i].card;
+  if (lead === trump || c.suit !== trump) return false;
+  const prev = cards.slice(1, i).filter((e) => e.card.suit === trump);
+  return prev.length === 0 || c.rank > Math.max(...prev.map((e) => e.card.rank));
+}
 
 function cardLabel(card) { return RANK_LABEL[card.rank] + SUIT_SYM[card.suit]; }
 function isRed(card) { return RED_SUITS.includes(card.suit); }
@@ -191,6 +273,7 @@ function render(state) {
   $('leaveRoomBtn').classList.remove('hidden');
   $('leaveRoomBtn').disabled = false;
   if (state.state === 'lobby') {
+    gameOverShownKey = -1;
     $('lobby').classList.remove('hidden');
     $('game').classList.add('hidden');
     renderLobby(state);
@@ -199,6 +282,23 @@ function render(state) {
     $('game').classList.remove('hidden');
     renderGame(state);
   }
+  if (!$('scoreModal').classList.contains('hidden')) renderScoreModal();
+}
+
+const TARGETS = [[0, 'آزاد'], [330, '۳۳۰'], [660, '۶۶۰'], [1165, '۱۱۶۵'], [1650, '۱۶۵۰']];
+function renderTarget(state) {
+  const el = $('targetOptions');
+  el.innerHTML = '';
+  for (const [value, label] of TARGETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.className = 'target-btn' + (state.targetScore === value ? ' active' : '');
+    b.disabled = !state.isAdmin;
+    b.onclick = () => socket.emit('setTarget', { target: value });
+    el.appendChild(b);
+  }
+  $('targetHint').textContent = state.isAdmin ? '' : 'فقط مدیر روم می‌تواند امتیاز نهایی را تغییر دهد';
 }
 
 function renderLobby(state) {
@@ -209,8 +309,11 @@ function renderLobby(state) {
     const pl = state.players.find((p) => p.seat === s);
     const box = document.createElement('div');
     box.className = 'seatbox' + (selectedSeats.includes(s) ? ' selected' : '');
-    const team = s % 2 === 0 ? state.teamNames.A : state.teamNames.B;
-    box.innerHTML = `<div class="tag">\u0635\u0646\u062F\u0644\u06CC ${s + 1} \u00B7 ${team}</div><div>${pl ? (pl.isAdmin ? '\u2699\uFE0F ' : '') + pl.name + (pl.ready || pl.isAdmin ? ' \u2705' : '') : '\u2014 \u062E\u0627\u0644\u06CC \u2014'}</div>`;
+    const team = escapeHtml(s % 2 === 0 ? state.teamNames.A : state.teamNames.B);
+    const who = pl
+      ? (pl.isAdmin ? '⚙️ ' : '') + escapeHtml(pl.name) + (pl.ready || pl.isAdmin ? ' ✅' : '') + (pl.connected === false ? ' <small>⚠️ قطع</small>' : '')
+      : '— خالی —';
+    box.innerHTML = `<div class="tag">صندلی ${s + 1} · ${team}</div><div>${who}</div>`;
     if (state.isAdmin) {
       box.onclick = () => {
         selectedSeats.push(s);
@@ -223,11 +326,12 @@ function renderLobby(state) {
     }
     seatsEl.appendChild(box);
   }
+  renderTarget(state);
   $('teamNameEditor').classList.toggle('hidden', !state.isAdmin);
   if (state.isAdmin) { $('teamAName').value = state.teamNames.A; $('teamBName').value = state.teamNames.B; }
   const me = state.players.find((p) => p.seat === state.mySeat);
   $('readyBtn').classList.toggle('hidden', state.isAdmin || !me);
-  if (me) $('readyBtn').textContent = me.ready ? '\u0622\u0645\u0627\u062F\u0647\u200C\u0627\u0645 \u2705 (\u0644\u063A\u0648)' : '\u0622\u0645\u0627\u062F\u0647\u200C\u0627\u0645';
+  if (me) $('readyBtn').textContent = me.ready ? 'آماده‌ام ✅ (لغو)' : 'آماده‌ام';
   $('startBtn').classList.toggle('hidden', !state.isAdmin);
   $('startBtn').disabled = state.players.length < 4 || !state.players.every((p) => p.isAdmin || p.ready);
 }
@@ -246,29 +350,39 @@ function renderGame(state) {
     kittyRevealKey = '';
     kittyRevealVisible = false;
   }
-  const rel = (seat) => (seat - state.mySeat + 4) % 4; // 0 me,1 right,2 top,3 left
-  const posName = { 0: 'bottom', 1: 'right', 2: 'top', 3: 'left' };
+  const rel = (seat) => (seat - state.mySeat + 4) % 4;
   const bidTag = (s) => {
     if (state.state !== 'bidding' || !state.bidding || !state.bidding.bids) return '';
     const v = state.bidding.bids[s];
     return v === 'pass' ? ' · پاس' : v ? ' · ' + v : '';
   };
+  const trickFull = Boolean(state.trick && state.trick.cards.length >= 4);
+  const activeSeat = state.state === 'bidding' && state.bidding ? state.bidding.turnSeat
+    : state.state === 'kitty' ? state.hakemSeat
+    : state.state === 'playing' && state.trick && !trickFull ? state.trick.turnSeat
+    : null;
   for (let s = 0; s < 4; s++) {
     const pl = state.players.find((p) => p.seat === s);
-    const nameEl = $('name-' + posName[rel(s)]);
-    if (nameEl) nameEl.textContent = pl ? pl.name + (state.hakemSeat === s ? ' \u{1F451}' : '') + bidTag(s) + (state.trick && state.trick.turnSeat === s ? ' \u23F3' : '') : '';
+    const nameEl = $('name-' + POS[rel(s)]);
+    if (!nameEl) continue;
+    const offline = Boolean(pl) && pl.connected === false;
+    nameEl.textContent = pl ? pl.name + (state.hakemSeat === s ? ' 👑' : '') + bidTag(s) + (offline ? ' · قطع' : '') + (activeSeat === s ? ' ⏳' : '') : '';
+    nameEl.classList.toggle('turn', Boolean(pl) && activeSeat === s);
+    nameEl.classList.toggle('offline', offline);
   }
-  $('roundInfo').textContent = '\u062F\u0633\u062A ' + (state.history.length + 1) + (state.hakemSeat !== null && state.bidAmount ? ' \u00B7 \u062D\u0627\u06A9\u0645 \u0627\u0645\u062A\u06CC\u0627\u0632 ' + state.bidAmount + ' \u062E\u0648\u0627\u0646\u062F\u0647' : '');
-  $('trumpInfo').textContent = state.trumpSuit ? '\u062D\u06A9\u0645: ' + SUIT_SYM[state.trumpSuit] : '';
+  const over = state.state === 'roundEnd' || state.state === 'gameOver';
+  $('roundInfo').textContent = 'دست ' + faNum(state.history.length + (over ? 0 : 1))
+    + (state.hakemSeat !== null && state.bidAmount ? ' · حاکم امتیاز ' + faNum(state.bidAmount) + ' خوانده' : '');
+  $('trumpInfo').textContent = state.trumpSuit ? 'حکم: ' + SUIT_SYM[state.trumpSuit] : '';
   $('trumpInfo').classList.toggle('hidden', !state.trumpSuit);
-  const turnSeat = state.bidding ? state.bidding.turnSeat : state.trick && state.trick.turnSeat;
-  const turnPlayer = state.players.find((player) => player.seat === turnSeat);
+  const turnPlayer = state.players.find((player) => player.seat === activeSeat);
+  const myActive = activeSeat !== null && activeSeat === state.mySeat;
   if (state.state === 'bidding') {
-    $('turnHint').textContent = turnPlayer ? '\u0646\u0648\u0628\u062A \u062E\u0648\u0627\u0646\u062F\u0646: ' + turnPlayer.name : '';
+    $('turnHint').textContent = myActive ? 'نوبت خوانش شماست' : turnPlayer ? 'نوبت خواندن: ' + turnPlayer.name : '';
   } else if (state.state === 'kitty') {
     $('turnHint').textContent = state.hakemSeat === state.mySeat ? 'کارت‌ها را بخوابان' : 'در انتظار کارت خواباندن حاکم';
   } else if (state.state === 'playing') {
-    $('turnHint').textContent = turnPlayer ? '\u0646\u0648\u0628\u062A \u0628\u0627\u0632\u06CC: ' + turnPlayer.name : '';
+    $('turnHint').textContent = myActive ? 'نوبت شماست' : turnPlayer ? 'نوبت بازی: ' + turnPlayer.name : '';
   } else {
     $('turnHint').textContent = '';
   }
@@ -276,69 +390,78 @@ function renderGame(state) {
   for (const team of ['A', 'B']) {
     const teamEl = $('teamTricks' + team);
     const anchorSeat = team === 'A' ? 0 : 1;
-    const position = posName[rel(anchorSeat)];
+    const position = POS[rel(anchorSeat)];
     const count = state.tricksWon ? state.tricksWon[team] : 0;
     teamEl.className = 'team-tricks at-' + position;
     const pile = count ? `<div class="trick-pile" aria-hidden="true">${Array.from({ length: count }, (_, i) => `<span class="trick-pile-card" style="--stack-index:${i}"></span>`).join('')}</div>` : '';
-    teamEl.innerHTML = `${pile}<div class="team-tricks-label"><span>${escapeHtml(state.teamNames[team])}</span><b>${count.toLocaleString('fa-IR')} \u062F\u0633\u062A</b></div>`;
+    teamEl.innerHTML = `${pile}<div class="team-tricks-label"><span>${escapeHtml(state.teamNames[team])}</span><b>${faNum(count)} دست</b></div>`;
   }
 
-  // trick area
+  // trick area (فقط وقتی محتوا عوض شد بازسازی می‌شود تا انیمیشن‌ها تکرار نشوند)
   const trickArea = $('trickArea');
-  trickArea.innerHTML = '';
-  if (state.state === 'bidding') {
-    const kittyPile = document.createElement('div');
-    kittyPile.className = 'kitty-pile';
-    for (let i = 0; i < 4; i++) {
-      const back = document.createElement('div');
-      back.className = 'kitty-back';
-      back.setAttribute('aria-label', '\u06A9\u0627\u0631\u062A \u0648\u0633\u0637');
-      kittyPile.appendChild(back);
+  if (Date.now() >= collectingUntil) {
+    let sig, build = null;
+    if (state.state === 'bidding') {
+      sig = 'bidding';
+      build = () => {
+        const kittyPile = document.createElement('div');
+        kittyPile.className = 'kitty-pile';
+        for (let i = 0; i < 4; i++) {
+          const back = document.createElement('div');
+          back.className = 'kitty-back';
+          back.setAttribute('aria-label', 'کارت وسط');
+          kittyPile.appendChild(back);
+        }
+        trickArea.appendChild(kittyPile);
+      };
+    } else if (state.state === 'kitty') {
+      const show = kittyRevealVisible && revealCards.length;
+      sig = 'kitty:' + (show ? revealKey : '');
+      build = () => {
+        if (!show) return;
+        const reveal = document.createElement('div');
+        reveal.className = 'kitty-reveal';
+        reveal.innerHTML = `<span class="reveal-caption">کارت‌های وسط</span><div class="reveal-cards">${revealCards.map((card) => `<div class="reveal-card${isRed(card) ? ' red' : ''}"><b>${RANK_LABEL[card.rank]}</b><span>${SUIT_SYM[card.suit]}</span></div>`).join('')}</div>`;
+        trickArea.appendChild(reveal);
+      };
+    } else if (state.trick) {
+      const cards = state.trick.cards;
+      sig = 'trick:' + cards.map((e) => e.card.id).join(',');
+      build = () => {
+        if (!cards.length) renderedTrickIds = new Set();
+        let cut = false;
+        cards.forEach((entry, idx) => {
+          const d = document.createElement('div');
+          const isNew = trickSeeded && !renderedTrickIds.has(entry.card.id);
+          const cutPlay = isNew && isCutPlay(cards, idx, state.trumpSuit);
+          if (cutPlay) cut = true;
+          d.className = `trick-card at-${POS[rel(entry.seat)]}` + (isRed(entry.card) ? ' red' : '') + (isNew ? ' enter' : '') + (cutPlay ? ' cut-flash' : '');
+          d.textContent = cardLabel(entry.card);
+          const player = state.players.find((candidate) => candidate.seat === entry.seat);
+          if (player) d.title = `${player.name}: ${cardLabel(entry.card)}`;
+          trickArea.appendChild(d);
+        });
+        renderedTrickIds = new Set(cards.map((e) => e.card.id));
+        trickSeeded = true;
+        if (cut) triggerTableShake();
+      };
+    } else {
+      sig = 'none';
+      build = () => { renderedTrickIds = new Set(); };
     }
-    trickArea.appendChild(kittyPile);
-  } else if (state.state === 'kitty') {
-    if (kittyRevealVisible && revealCards.length) {
-      const reveal = document.createElement('div');
-      reveal.className = 'kitty-reveal';
-      reveal.innerHTML = `<span class="reveal-caption">کارت‌های وسط</span><div class="reveal-cards">${revealCards.map((card) => `<div class="reveal-card${isRed(card) ? ' red' : ''}"><b>${RANK_LABEL[card.rank]}</b><span>${SUIT_SYM[card.suit]}</span></div>`).join('')}</div>`;
-      trickArea.appendChild(reveal);
-    }
-  } else if (state.trick) {
-    for (const entry of state.trick.cards) {
-      const d = document.createElement('div');
-      const position = posName[rel(entry.seat)];
-      d.className = `trick-card at-${position}` + (isRed(entry.card) ? ' red' : '');
-      d.textContent = cardLabel(entry.card);
-      const player = state.players.find((candidate) => candidate.seat === entry.seat);
-      if (player) d.title = `${player.name}: ${cardLabel(entry.card)}`;
-      trickArea.appendChild(d);
+    if (trickArea.dataset.sig !== sig) {
+      trickArea.dataset.sig = sig;
+      trickArea.innerHTML = '';
+      build();
     }
   }
 
   // hand
-  const handEl = $('myHand');
-  handEl.innerHTML = '';
   const inKitty = state.state === 'kitty' && state.hakemSeat === state.mySeat;
-  const myTurnToPlay = state.state === 'playing' && state.trick && state.trick.turnSeat === state.mySeat;
-  for (const card of state.myHand) {
-    const d = document.createElement('div');
-    d.className = 'card' + (isRed(card) ? ' red' : '');
-    d.innerHTML = `<div>${RANK_LABEL[card.rank]}</div><div class="suit">${SUIT_SYM[card.suit]}</div>`;
-    if (inKitty) {
-      if (selectedKittyCards.includes(card.id)) d.classList.add('selected');
-      d.onclick = () => {
-        const idx = selectedKittyCards.indexOf(card.id);
-        if (idx >= 0) selectedKittyCards.splice(idx, 1);
-        else if (selectedKittyCards.length < 4) selectedKittyCards.push(card.id);
-        renderGame(state);
-      };
-    } else if (myTurnToPlay) {
-      d.onclick = () => socket.emit('playCard', { cardId: card.id });
-    } else {
-      d.style.cursor = 'default';
-    }
-    handEl.appendChild(d);
-  }
+  renderHand(state, inKitty);
+
+  // previous trick button
+  $('prevTrickBtn').classList.toggle('hidden', !state.lastTrick);
 
   // bidding panel
   const biddingOn = state.state === 'bidding' && state.bidding;
@@ -375,20 +498,85 @@ function renderGame(state) {
   else $('confirmDiscard').textContent = '\u062A\u0627\u06CC\u06CC\u062F (\u06F4 \u06A9\u0627\u0631\u062A \u0627\u0646\u062A\u062E\u0627\u0628 \u06A9\u0646)';
   if (inKitty) $('confirmDiscard').textContent = selectedKittyCards.length === 4 ? 'تایید خواباندن' : `انتخاب شده: ${selectedKittyCards.length}/4`;
 
-  // round end panel
-  const roundEnd = state.state === 'roundEnd';
+  // round end / game over panel
+  const gameOver = state.state === 'gameOver';
+  const roundEnd = state.state === 'roundEnd' || gameOver;
   $('roundEndPanel').classList.toggle('hidden', !roundEnd);
   if (roundEnd) {
     const last = state.history[state.history.length - 1];
-    const hakemName = (state.players.find((p) => p.seat === last.hakemSeat) || {}).name || '';
-    const teamName = (t) => state.teamNames[t];
+    const hakemName = escapeHtml((state.players.find((p) => p.seat === last.hakemSeat) || {}).name || '');
+    const teamName = (t) => escapeHtml(state.teamNames[t]);
     const resLabel = RESULT_LABELS[last.resultType] || last.resultType;
-    $('roundEndText').innerHTML = `<b>${resLabel}</b><br>\u062D\u0627\u06A9\u0645: ${hakemName} (\u062E\u0648\u0627\u0646\u062F\u0647: ${last.bid})<br>\u0627\u0645\u062A\u06CC\u0627\u0632 ${teamName(last.hakemTeam)}: ${last.pointsHakem} (${last.deltaHakem >= 0 ? '+' : ''}${last.deltaHakem})<br>\u0627\u0645\u062A\u06CC\u0627\u0632 ${teamName(last.hakemTeam === 'A' ? 'B' : 'A')}: ${last.pointsOpp} (${last.deltaOpp >= 0 ? '+' : ''}${last.deltaOpp})<br><br>\u062C\u0645\u0639 \u06A9\u0644: ${teamName('A')} = ${state.scores.A} | ${teamName('B')} = ${state.scores.B}`;
-    $('nextRoundBtn').classList.toggle('hidden', !state.isAdmin);
+    const oppTeam = last.hakemTeam === 'A' ? 'B' : 'A';
+    const sign = (n) => (n >= 0 ? '+' : '') + n;
+    $('roundEndText').innerHTML = `<b>${resLabel}</b><br>حاکم: ${hakemName} (خوانده: ${last.bid})<br>امتیاز ${teamName(last.hakemTeam)}: ${last.pointsHakem} (${sign(last.deltaHakem)})<br>امتیاز ${teamName(oppTeam)}: ${last.pointsOpp} (${sign(last.deltaOpp)})<br><br>جمع کل: ${teamName('A')} = ${state.scores.A} | ${teamName('B')} = ${state.scores.B}`
+      + (gameOver ? `<br><br><span class="winner-banner">🏆 برنده بازی: ${teamName(state.winnerTeam)}</span>` : '');
+    $('nextRoundBtn').classList.toggle('hidden', gameOver || !state.isAdmin);
+    $('restartBtn').classList.toggle('hidden', !(gameOver && state.isAdmin));
+    $('gameOverNote').classList.toggle('hidden', !(gameOver && !state.isAdmin));
+  }
+  if (gameOver && gameOverShownKey !== state.history.length) {
+    gameOverShownKey = state.history.length;
+    $('scoreModal').classList.remove('hidden');
+    renderScoreModal();
   }
 
   renderChat(state);
 }
+
+function renderHand(state, inKitty) {
+  const handEl = $('myHand');
+  const myTurnToPlay = state.state === 'playing' && state.trick && state.trick.turnSeat === state.mySeat && state.trick.cards.length < 4;
+  const legal = myTurnToPlay ? new Set(legalCards(state.myHand, state.trick).map((c) => c.id)) : null;
+  const existing = new Map(Array.from(handEl.children).map((el) => [el.dataset.id, el]));
+  const keep = new Set(state.myHand.map((c) => c.id));
+  existing.forEach((el, id) => { if (!keep.has(id)) el.remove(); });
+  state.myHand.forEach((card, idx) => {
+    let el = existing.get(card.id);
+    if (!el) {
+      el = document.createElement('div');
+      el.dataset.id = card.id;
+      el.innerHTML = `<div>${RANK_LABEL[card.rank]}</div><div class="suit">${SUIT_SYM[card.suit]}</div>`;
+      el.style.setProperty('--i', idx);
+      el.className = 'card deal-in' + (isRed(card) ? ' red' : '');
+      el.addEventListener('animationend', () => el.classList.remove('deal-in'));
+    }
+    const isLegal = Boolean(legal) && legal.has(card.id);
+    el.classList.toggle('selected', inKitty && selectedKittyCards.includes(card.id));
+    el.classList.toggle('playable', isLegal);
+    el.classList.toggle('dimmed', myTurnToPlay && !isLegal);
+    el.classList.toggle('clickable', inKitty || isLegal);
+    el.onclick = () => {
+      if (inKitty) {
+        const i = selectedKittyCards.indexOf(card.id);
+        if (i >= 0) selectedKittyCards.splice(i, 1);
+        else if (selectedKittyCards.length < 4) selectedKittyCards.push(card.id);
+        if (lastState) renderGame(lastState);
+      } else if (isLegal) {
+        socket.emit('playCard', { cardId: card.id });
+      } else if (myTurnToPlay) {
+        el.classList.remove('deny'); void el.offsetWidth; el.classList.add('deny');
+      }
+    };
+    if (handEl.children[idx] !== el) handEl.insertBefore(el, handEl.children[idx] || null);
+  });
+}
+
+function showPrevTrick() {
+  if (!lastState || !lastState.lastTrick) return;
+  const lt = lastState.lastTrick;
+  const winner = lastState.players.find((p) => p.seat === lt.winnerSeat);
+  $('prevTrickTitle').textContent = 'دست قبل' + (winner ? ' · برنده: ' + winner.name : '');
+  $('prevTrickCards').innerHTML = lt.cards.map((e) => `<div class="trick-card at-${POS[relPos(e.seat)]}${isRed(e.card) ? ' red' : ''}${e.seat === lt.winnerSeat ? ' winner' : ''}">${cardLabel(e.card)}</div>`).join('');
+  $('prevTrick').classList.remove('hidden');
+}
+function hidePrevTrick() { $('prevTrick').classList.add('hidden'); }
+const prevBtn = $('prevTrickBtn');
+prevBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); showPrevTrick(); });
+['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => prevBtn.addEventListener(ev, hidePrevTrick));
+prevBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+$('restartBtn').onclick = () => socket.emit('restartGame');
 
 function renderScoreModal() {
   if (!lastState) return;
@@ -396,7 +584,22 @@ function renderScoreModal() {
   const scoreB = Number(lastState.scores.B) || 0;
   const teamAName = escapeHtml(lastState.teamNames.A);
   const teamBName = escapeHtml(lastState.teamNames.B);
-  $('scoreTotals').innerHTML = `<div class="scoreboard-caption"><span>\u0645\u06CC\u0632: \u0628\u0627\u0632\u06CC \u0622\u0646\u0644\u0627\u06CC\u0646</span><b>\u0627\u0645\u062A\u06CC\u0627\u0632 \u0647\u062F\u0641: \u06F1\u06F6\u06F5</b></div><div class="scoreboard-teambar"><div class="scoreboard-team team-a"><small>${teamAName}</small><strong>${scoreA.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div><div class="scoreboard-vs">VS</div><div class="scoreboard-team team-b"><small>${teamBName}</small><strong>${scoreB.toLocaleString('fa-IR')}</strong><span>\u0627\u0645\u062A\u06CC\u0627\u0632 \u06A9\u0644</span></div></div>`;
+  const target = lastState.targetScore ? faNum(lastState.targetScore) : 'آزاد';
+  const gameOver = lastState.state === 'gameOver';
+  const banner = gameOver ? `<div class="winner-banner big">🏆 برنده بازی: ${escapeHtml(lastState.teamNames[lastState.winnerTeam])}</div>` : '';
+  $('scoreTotals').innerHTML = `${banner}<div class="scoreboard-caption"><span>میز: بازی آنلاین</span><b>امتیاز هدف: ${target}</b></div><div class="scoreboard-teambar"><div class="scoreboard-team team-a"><small>${teamAName}</small><strong>${scoreA.toLocaleString('fa-IR')}</strong><span>امتیاز کل</span></div><div class="scoreboard-vs">VS</div><div class="scoreboard-team team-b"><small>${teamBName}</small><strong>${scoreB.toLocaleString('fa-IR')}</strong><span>امتیاز کل</span></div></div>`;
+  const actions = $('modalActions');
+  actions.innerHTML = '';
+  if (gameOver) {
+    if (lastState.isAdmin) {
+      const b = document.createElement('button');
+      b.textContent = '🔁 بازی مجدد';
+      b.onclick = () => { socket.emit('restartGame'); $('scoreModal').classList.add('hidden'); };
+      actions.appendChild(b);
+    } else {
+      actions.textContent = 'در انتظار مدیر روم برای شروع بازی مجدد...';
+    }
+  }
   if (!lastState.history.length) {
     $('scoreHistory').innerHTML = '<div class="empty-history">\u0647\u0646\u0648\u0632 \u062F\u0633\u062A\u06CC \u0628\u0647 \u067E\u0627\u06CC\u0627\u0646 \u0646\u0631\u0633\u06CC\u062F\u0647 \u0627\u0633\u062A.</div>';
     return;

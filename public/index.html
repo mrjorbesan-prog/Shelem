@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="connBar" class="conn-bar hidden" role="status" aria-live="polite"></div>
 
 <div id="home" class="screen">
   <h1>&#x1F0A1; &#x0634;&#x0644;&#x0645; &#x0622;&#x0646;&#x0644;&#x0627;&#x06CC;&#x0646;</h1>
@@ -26,6 +27,11 @@
   <div id="teamNameEditor" class="hidden">
     <label>&#x0627;&#x0633;&#x0645; &#x062A;&#x06CC;&#x0645; &#x06F1; (&#x062E;&#x0627;&#x0646;&#x0647;&#x200C;&#x0647;&#x0627;&#x06CC; &#x06F1;&#x0648;&#x06F3;): <input id="teamAName"></label>
     <label>&#x0627;&#x0633;&#x0645; &#x062A;&#x06CC;&#x0645; &#x06F2; (&#x062E;&#x0627;&#x0646;&#x0647;&#x200C;&#x0647;&#x0627;&#x06CC; &#x06F2;&#x0648;&#x06F4;): <input id="teamBName"></label>
+  </div>
+  <div class="target-settings">
+    <div class="target-label">امتیاز نهایی بازی</div>
+    <div id="targetOptions" class="target-options"></div>
+    <div id="targetHint" class="hint"></div>
   </div>
   <button id="readyBtn" class="hidden">&#x0622;&#x0645;&#x0627;&#x062F;&#x0647;&#x200C;&#x0627;&#x0645;</button>
   <button id="startBtn" class="hidden">&#x0634;&#x0631;&#x0648;&#x0639; &#x0628;&#x0627;&#x0632;&#x06CC;</button>
@@ -53,6 +59,8 @@
     <div class="team-tricks" id="teamTricksB"></div>
     <div class="center" id="trickArea"></div>
     <div id="trickFeedback" class="trick-feedback hidden" aria-live="polite"></div>
+    <button id="prevTrickBtn" class="prev-btn hidden" type="button" aria-label="مرور دست قبل">🕘 دست قبل</button>
+    <div id="prevTrick" class="prev-trick hidden"><div id="prevTrickTitle"></div><div id="prevTrickCards"></div></div>
   </div>
 
   <div id="biddingPanel" class="panel hidden">
@@ -69,6 +77,8 @@
 
   <div id="roundEndPanel" class="panel hidden">
     <div id="roundEndText"></div>
+    <p id="gameOverNote" class="hidden">در انتظار مدیر روم برای شروع بازی مجدد...</p>
+    <button id="restartBtn" class="hidden">🔁 بازی مجدد</button>
     <button id="nextRoundBtn" class="hidden">&#x062F;&#x0633;&#x062A; &#x0628;&#x0639;&#x062F;&#x06CC;</button>
   </div>
 
@@ -103,6 +113,7 @@
     </div>
     <div id="scoreTotals"></div>
     <div id="scoreHistory"></div>
+    <div id="modalActions" class="modal-actions"></div>
   </div>
 </div>
 

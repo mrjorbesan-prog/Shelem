@@ -347,3 +347,78 @@ button:not(:disabled):hover { filter: brightness(1.08); transform: translateY(-2
 .bid-chip { flex:1 1 0; min-width:0; text-align:center; direction:rtl; padding:5px 4px; }
 .bid-chip b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .bid-chip span { white-space:nowrap; font-size:10.5px; }
+
+/* ===== Connection bar ===== */
+.conn-bar { position:fixed; top:0; left:0; right:0; z-index:95; padding:6px 12px; text-align:center; font-size:12.5px; line-height:1.5; color:#fff; box-shadow:0 2px 10px rgba(0,0,0,.35); animation:barIn .25s ease both; }
+.conn-bar.bad { background:#a52a33; }
+.conn-bar.warn { background:#9a6a12; }
+body.has-conn-bar { padding-top:34px; }
+body.has-conn-bar .leave-room, body.has-conn-bar #chatBox { top:40px; }
+@keyframes barIn { from { transform:translateY(-100%); } to { transform:translateY(0); } }
+
+/* ===== Hand cards: legal / illegal ===== */
+.hand .card { transition:transform .2s ease, opacity .25s ease, filter .25s ease, box-shadow .2s ease, border-color .2s ease; }
+.hand .card:not(.clickable) { cursor:default; }
+.hand .card:not(.clickable):hover { transform:none; box-shadow:0 5px 12px rgba(0,0,0,.32), inset 0 0 0 1px rgba(0,0,0,.06); }
+.hand .card.playable { transform:translateY(-9px); box-shadow:0 10px 16px rgba(0,0,0,.35), 0 0 0 1px rgba(231,189,98,.55); }
+.hand .card.playable:hover { transform:translateY(-14px); }
+.hand .card.dimmed { opacity:.38; filter:saturate(.55) brightness(.82); }
+.hand .card.selected { transform:translateY(-12px); }
+.hand .card.deny { animation:deny .3s ease; }
+.hand .card.deal-in { animation:dealIn .42s cubic-bezier(.2,.7,.2,1) backwards; animation-delay:calc(var(--i, 0) * 28ms); }
+@keyframes dealIn { from { opacity:0; transform:translateY(26px) scale(.9); } }
+@keyframes deny { 0%,100% { translate:0 0; } 25% { translate:-3px 0; } 75% { translate:3px 0; } }
+
+/* ===== Trick cards: fly in / collect / cut ===== */
+.trick-card { animation:none; }
+.trick-card.at-bottom { --fx:0px; --fy:20vh; }
+.trick-card.at-top { --fx:0px; --fy:-20vh; }
+.trick-card.at-left { --fx:calc(-1 * clamp(90px, 22vw, 220px)); --fy:0px; }
+.trick-card.at-right { --fx:clamp(90px, 22vw, 220px); --fy:0px; }
+.trick-card.enter { animation:cardFly .38s cubic-bezier(.2,.75,.25,1) backwards; }
+@keyframes cardFly { from { opacity:.25; transform:translate(calc(-50% + var(--fx)), calc(-50% + var(--fy))) scale(.85) rotate(-6deg); } }
+.trick-card.to-bottom { --dx:0px; --dy:24vh; }
+.trick-card.to-top { --dx:0px; --dy:-24vh; }
+.trick-card.to-left { --dx:calc(-1 * clamp(110px, 26vw, 260px)); --dy:0px; }
+.trick-card.to-right { --dx:clamp(110px, 26vw, 260px); --dy:0px; }
+.trick-card.collect { animation:cardCollect .44s cubic-bezier(.5,0,.75,.4) forwards; }
+@keyframes cardCollect { to { opacity:0; transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.55); } }
+.trick-card.cut-flash { animation:cardFly .38s cubic-bezier(.2,.75,.25,1) backwards, cutGlow .7s ease .1s 1; }
+@keyframes cutGlow { 50% { box-shadow:0 0 0 3px rgba(231,189,98,.9), 0 0 22px rgba(231,189,98,.8); } }
+.trick-card.winner { box-shadow:0 0 0 2px var(--gold-bright, #e7bd62), 0 0 14px rgba(231,189,98,.6); }
+
+/* ===== Turn glow ring ===== */
+.pname { transition:box-shadow .3s ease, border-color .3s ease, opacity .3s ease; }
+.pname.turn { border-color:rgba(231,189,98,.95); box-shadow:0 0 0 2px rgba(231,189,98,.85), 0 0 14px rgba(231,189,98,.65); animation:turnGlow 1.9s ease-in-out infinite; }
+.pname.offline { opacity:.55; }
+@keyframes turnGlow { 50% { box-shadow:0 0 0 3px rgba(231,189,98,.55), 0 0 24px rgba(231,189,98,.9); } }
+
+/* ===== Panels / modal / buttons ===== */
+.panel:not(.hidden) { animation:panelIn .28s ease both; }
+.modal:not(.hidden) { animation:fadeIn .22s ease both; }
+.modal:not(.hidden) .modal-content { animation:panelIn .28s ease both; }
+button:not(:disabled):active { transform:scale(.97); }
+@keyframes panelIn { from { opacity:0; transform:translateY(8px); } }
+@keyframes fadeIn { from { opacity:0; } }
+
+/* ===== Previous trick ===== */
+.prev-btn { position:absolute; z-index:4; top:50px; left:10px; padding:6px 10px; font-size:12px; border-radius:16px; background:rgba(5,27,24,.85); color:#ffe4a4; border:1px solid rgba(231,189,98,.45); box-shadow:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:none; }
+.prev-trick { position:absolute; inset:0; z-index:6; border-radius:16px; background:rgba(3,22,19,.86); pointer-events:none; animation:fadeIn .15s ease both; }
+.prev-trick #prevTrickTitle { position:absolute; top:12px; left:0; right:0; text-align:center; color:#ffe4a4; font-size:13px; }
+.prev-trick #prevTrickCards { position:absolute; inset:0; }
+
+/* ===== Lobby target + game over ===== */
+.target-settings { text-align:center; margin:14px auto; }
+.target-label { margin-bottom:6px; color:#ffe4a4; }
+#lobby .target-options button { display:inline-block; margin:4px; min-width:58px; background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.2); }
+#lobby .target-options button.active { background:#d4a017; color:#1a1a1a; border-color:#d4a017; }
+#lobby .target-options button:disabled { opacity:.7; }
+#lobby .target-options button.active:disabled { opacity:1; }
+.winner-banner { color:#ffe08a; font-size:16px; }
+.winner-banner.big { text-align:center; font-size:20px; margin-bottom:12px; }
+.modal-actions { text-align:center; margin-top:14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; animation-delay:0s !important; transition-duration:.01ms !important; }
+}
+body.has-conn-bar #chatLatest, body.has-conn-bar #chatExpanded { top:86px; }
