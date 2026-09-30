@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { pingInterval: 20000, pingTimeout: 60000 });
+const io = new Server(server, { pingInterval: 15000, pingTimeout: 25000 });
 process.on('uncaughtException', (e) => console.error('uncaughtException', e));
 process.on('unhandledRejection', (e) => console.error('unhandledRejection', e));
 app.get('/health', (req, res) => res.send('ok'));
@@ -120,6 +120,9 @@ function newRoom(roomId, creatorClientId, creatorName) {
     roundPoints: { A: 0, B: 0 },
     tricksWon: { A: 0, B: 0 },
     chat: [],
+    targetScore: 0, // 0 = آزاد
+    winnerTeam: null,
+    lastTrick: null,
   };
   rooms[roomId] = room;
   return room;
@@ -143,6 +146,8 @@ function moveRoomToLobby(room) {
   room.trick = null;
   room.roundPoints = { A: 0, B: 0 };
   room.tricksWon = { A: 0, B: 0 };
+  room.lastTrick = null;
+  room.winnerTeam = null;
   for (const player of room.players) player.ready = player.clientId === room.adminClientId;
 }
 
@@ -206,6 +211,9 @@ function stateFor(room, clientId) {
     kittyReveal: room.state === 'kitty' && room.hakemSeat === mySeat ? room.kittyReveal : [],
     needsDiscard: room.state === 'kitty',
     chat: room.chat.slice(-50),
+    targetScore: room.targetScore,
+    winnerTeam: room.winnerTeam,
+    lastTrick: room.lastTrick,
   };
 }
 
@@ -232,6 +240,7 @@ function startDeal(room) {
   room.trick = null;
   room.roundPoints = { A: 0, B: 0 };
   room.tricksWon = { A: 0, B: 0 };
+  room.lastTrick = null;
   room.roundNo += 1;
   room.state = 'bidding';
   room.bidding = {
@@ -322,6 +331,7 @@ function resolveTrick(room, expected) {
   const team = teamOf(winnerSeat);
   room.roundPoints[team] += pts;
   room.tricksWon[team] += 1;
+  room.lastTrick = { number: t.number, winnerSeat, cards: t.cards.map((e) => ({ seat: e.seat, card: e.card })) };
   io.to(room.id).emit('trickResult', { winnerSeat, points: pts, cards: t.cards, trickNumber: t.number, wasCut });
   if (isLastTrick) {
     finalizeRound(room);
@@ -380,7 +390,17 @@ function finalizeRound(room) {
     deltaOpp,
     scoreAfter: { ...room.scores },
   });
-  room.state = 'roundEnd';
+  const T = room.targetScore;
+  const aDone = T > 0 && room.scores.A >= T;
+  const bDone = T > 0 && room.scores.B >= T;
+  if (aDone || bDone) {
+    // اگر هر دو تیم رسیدند: امتیاز بیشتر، و در برابری تیم حاکم
+    if (aDone && bDone) room.winnerTeam = room.scores.A === room.scores.B ? hakemTeam : (room.scores.A > room.scores.B ? 'A' : 'B');
+    else room.winnerTeam = aDone ? 'A' : 'B';
+    room.state = 'gameOver';
+  } else {
+    room.state = 'roundEnd';
+  }
   room.trick = null;
 }
 
@@ -445,6 +465,27 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (socket.data.clientId !== room.adminClientId) return;
     if (team === 'A' || team === 'B') room.teamNames[team] = String(name).slice(0, 20) || room.teamNames[team];
+    broadcast(room);
+  });
+
+  socket.on('setTarget', ({ target }) => {
+    const room = rooms[socket.data.roomId];
+    if (!room || room.state !== 'lobby') return;
+    if (socket.data.clientId !== room.adminClientId) return;
+    target = parseInt(target, 10);
+    if (![0, 330, 660, 1165, 1650].includes(target)) return;
+    room.targetScore = target;
+    broadcast(room);
+  });
+
+  socket.on('restartGame', () => {
+    const room = rooms[socket.data.roomId];
+    if (!room || room.state !== 'gameOver') return;
+    if (socket.data.clientId !== room.adminClientId) return;
+    room.scores = { A: 0, B: 0 };
+    room.history = [];
+    room.roundNo = 0;
+    moveRoomToLobby(room);
     broadcast(room);
   });
 
