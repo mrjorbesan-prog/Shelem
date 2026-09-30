@@ -195,7 +195,6 @@ function updateConnBar() {
 }
 socket.on('connect', () => { everConnected = true; rejoin(); updateConnBar(); });
 socket.on('disconnect', (reason) => {
-  Sfx.play('warn');
   if (reason === 'io server disconnect') socket.connect();
   updateConnBar();
 });
@@ -300,7 +299,7 @@ function render(state) {
   if (state.state === 'lobby') {
     gameOverShownKey = -1;
     prevPhase = 'lobby'; prevBids = null; prevTrump = null;
-    if (prevPlayerCount >= 0 && state.players.length !== prevPlayerCount) Sfx.play('join');
+    if (prevPlayerCount >= 0 && state.players.length !== prevPlayerCount)
     prevPlayerCount = state.players.length;
     $('lobby').classList.remove('hidden');
     $('game').classList.add('hidden');
@@ -397,7 +396,7 @@ function renderGame(state) {
     const nameEl = $('name-' + POS[rel(s)]);
     if (!nameEl) continue;
     const offline = Boolean(pl) && pl.connected === false;
-    nameEl.innerHTML = pl ? `<span class="av">${escapeHtml(Array.from(pl.name)[0] || '?')}</span><span class="nm">${escapeHtml(pl.name)}</span>${state.hakemSeat === s ? '<em class="tg">👑</em>' : ''}${bidTag(s) ? `<em class="tg">${escapeHtml(bidTag(s).replace(' · ', ''))}</em>` : ''}${offline ? '<em class="tg off">قطع</em>' : ''}${activeSeat === s ? '<em class="tg">⏳</em>' : ''}` : '';
+    nameEl.innerHTML = pl ? `<span class="nm">${escapeHtml(pl.name)}</span>${state.hakemSeat === s ? '<em class="tg">👑</em>' : ''}${bidTag(s) ? `<em class="tg">${escapeHtml(bidTag(s).replace(' · ', ''))}</em>` : ''}${offline ? '<em class="tg off">قطع</em>' : ''}${activeSeat === s ? '<em class="tg">⏳</em>' : ''}` : '';
     nameEl.classList.toggle('mine', (s % 2) === (state.mySeat % 2));
     nameEl.classList.toggle('opp', (s % 2) !== (state.mySeat % 2));
     nameEl.classList.toggle('turn', Boolean(pl) && activeSeat === s);
@@ -411,7 +410,7 @@ function renderGame(state) {
     const ot = ht === 'A' ? 'B' : 'A';
     const rp = state.roundPoints || { A: 0, B: 0 };
     const mineHakem = (ht === 'A') === (state.mySeat % 2 === 0);
-    $('trumpInfo').innerHTML = `<span class="tsuit ${state.trumpSuit === 'H' || state.trumpSuit === 'D' ? 'red' : ''}">${SUIT_CH[state.trumpSuit]}</span><span class="tpts"><b class="${mineHakem ? 'blue' : 'redbg'}">${faNum(rp[ht])}/${faNum(state.bidAmount || 0)}</b><b class="${mineHakem ? 'redbg' : 'blue'}">${faNum(rp[ot])}</b></span>`;
+    $('trumpInfo').innerHTML = `<span class="tsuit ${state.trumpSuit === 'H' || state.trumpSuit === 'D' ? 'red' : ''}">${SUIT_CH[state.trumpSuit]}</span>`;
   }
   $('trumpInfo').classList.toggle('hidden', !state.trumpSuit);
   const turnPlayer = state.players.find((player) => player.seat === activeSeat);
@@ -438,7 +437,6 @@ function renderGame(state) {
   if (state.trumpSuit && !prevTrump && state.state === 'playing') Sfx.play('trump');
   prevTrump = state.trumpSuit;
   const offCount = state.players.filter((p) => !p.connected && p.seat !== state.mySeat).length;
-  if (offCount > prevOffline) Sfx.play('warn');
   prevOffline = offCount;
   renderFans(state);
 
@@ -546,10 +544,11 @@ function renderGame(state) {
     }).join('');
     const opts = $('bidOptions');
     opts.innerHTML = '';
-    for (let v = Math.max(100, state.bidding.currentBid + 5); v <= 165; v += 5) {
+    for (let v = 100; v <= 165; v += 5) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = v;
+      b.disabled = v <= state.bidding.currentBid;
       b.onclick = () => { Sfx.play('tick'); socket.emit('placeBid', { amount: v }); };
       opts.appendChild(b);
     }
@@ -592,7 +591,7 @@ function layoutHand() {
   const n = handEl.children.length;
   if (!n) return;
   const cw = handEl.children[0].offsetWidth || 64;
-  const avail = handEl.clientWidth - 8;
+  const avail = handEl.clientWidth - (n > 12 ? 44 : 36);
   const step = n > 1 ? Math.min(cw * 0.78, (avail - cw) / (n - 1)) : cw;
   handEl.style.setProperty('--ov', Math.max(0, cw - step) + 'px');
 }
@@ -606,6 +605,8 @@ function renderHand(state, inKitty) {
   const keep = new Set(sorted.map((c) => c.id));
   existing.forEach((el, id) => { if (!keep.has(id)) el.remove(); });
   const n = sorted.length;
+  handEl.classList.toggle('many', n > 12);
+  const rotStep = n > 12 ? 1.25 : 1.8;
   sorted.forEach((card, idx) => {
     let el = existing.get(card.id);
     if (!el) {
@@ -617,7 +618,7 @@ function renderHand(state, inKitty) {
     }
     const d = idx - (n - 1) / 2;
     el.style.setProperty('--i', idx);
-    el.style.setProperty('--rot', (d * 1.9).toFixed(2) + 'deg');
+    el.style.setProperty('--rot', (d * rotStep).toFixed(2) + 'deg');
     el.style.setProperty('--arc', (d * d * 0.32).toFixed(1) + 'px');
     const isLegal = Boolean(legal) && legal.has(card.id);
     el.classList.toggle('selected', inKitty && selectedKittyCards.includes(card.id));

@@ -542,3 +542,30 @@ body.has-conn-bar .audio-btns { top:40px; }
 #myArea { padding-bottom:max(8px, env(safe-area-inset-bottom)); }
 #bidOptions, #bidOptions.bid-grid { direction:ltr !important; }
 #bidOptions button { direction:rtl; }
+
+/* ===== v4 fixes ===== */
+html, body { overflow-x:hidden; max-width:100%; }
+body.has-conn-bar { padding-top:0; }
+#lobby, #home { padding-top:64px; }
+body.has-conn-bar #lobby, body.has-conn-bar #home { padding-top:98px; }
+#game { height:100vh; height:100dvh; min-height:0; overflow:hidden; box-sizing:border-box; width:100%; }
+body.has-conn-bar #game { padding-top:34px; }
+#game .topbar { padding:56px 10px 0; }
+#game .round-status { gap:8px; row-gap:6px; }
+#game .round-status .turn-hint { position:static; max-width:none; margin:0; padding:5px 10px; border-radius:10px; background:rgba(8,12,30,.85); border:1px solid rgba(231,189,98,.45); color:#ffe4a4; font-size:12px; text-align:center; }
+#game .round-status .turn-hint:empty { display:none; }
+/* plates: name only */
+#game .pname { padding:5px 12px; }
+/* trump badge: suit only */
+#game .table-trump { padding:4px; border-radius:50%; background:rgba(8,12,30,.85); }
+/* previous-trick button: top-right of table, away from everything else */
+#game .prev-btn { top:12px; bottom:auto; left:auto; right:12px; }
+/* dimmed cards: opaque grey, not see-through */
+#game .hand .card.dimmed { opacity:1; filter:grayscale(.65) brightness(.68); box-shadow:0 2px 6px rgba(0,0,0,.35); }
+/* 16-card hand (hakem) */
+#game .hand.many { --cw:clamp(46px, 13.5vw, 76px); }
+/* disabled bid values stay visible but faded */
+.bid-grid button:disabled { opacity:.3; cursor:default; filter:grayscale(.5); }
+#game .round-status .turn-hint { flex:0 0 auto; width:auto; }
+#game .hand { padding-bottom:22px; height:calc(var(--cw) * 1.42 + 44px); }
+#myArea { padding-bottom:max(10px, env(safe-area-inset-bottom)); }
