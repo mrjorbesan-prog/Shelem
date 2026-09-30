@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0c1c">
 <title>&#x0634;&#x0644;&#x0645; &#x0622;&#x0646;&#x0644;&#x0627;&#x06CC;&#x0646;</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -57,17 +58,22 @@
     <div class="seat pos-right"><div class="pname" id="name-right"></div></div>
     <div class="team-tricks" id="teamTricksA"></div>
     <div class="team-tricks" id="teamTricksB"></div>
+    <div class="fan fan-top" id="fan-top"></div><div class="fan fan-left" id="fan-left"></div><div class="fan fan-right" id="fan-right"></div>
     <div class="center" id="trickArea"></div>
     <div id="trickFeedback" class="trick-feedback hidden" aria-live="polite"></div>
     <button id="prevTrickBtn" class="prev-btn hidden" type="button" aria-label="مرور دست قبل">🕘 دست قبل</button>
     <div id="prevTrick" class="prev-trick hidden"><div id="prevTrickTitle"></div><div id="prevTrickCards"></div></div>
   </div>
 
+  <div id="bidMenu" class="bid-menu hidden">
+    <div class="bid-menu-title">نوبت خوانش شماست</div>
+    <div id="bidMenuInfo" class="bid-menu-info"></div>
+    <div id="bidOptions" class="bid-grid"></div>
+    <button id="passBtn" class="pass-btn">پاس</button>
+  </div>
   <div id="biddingPanel" class="panel hidden">
     <div id="bidPlayers" class="bid-players"></div>
     <div id="bidStatus"></div>
-    <div id="bidOptions" class="bid-options"></div>
-    <button id="passBtn">&#x067E;&#x0627;&#x0633;</button>
   </div>
 
   <div id="kittyPanel" class="panel hidden">
@@ -87,7 +93,9 @@
     <div class="hand" id="myHand"></div>
   </div>
 
-  <div id="chatBox">
+</div>
+
+  <div id="chatBox" class="hidden">
     <button id="chatToggle" type="button" aria-expanded="false" aria-label="چت">&#x1F4AC;<span id="chatBadge" class="hidden"></span></button>
     <div id="chatLatest" class="hidden"></div>
     <div id="chatExpanded" class="hidden">
@@ -98,9 +106,10 @@
       </div>
     </div>
   </div>
-</div>
 
 <button id="leaveRoomBtn" class="leave-room hidden" type="button">&#x062E;&#x0631;&#x0648;&#x062C; &#x0627;&#x0632; &#x0631;&#x0648;&#x0645;</button>
+<div class="audio-btns"><button id="musicBtn" type="button" aria-label="موزیک">🎵</button><button id="sfxBtn" type="button" aria-label="افکت صوتی">🔊</button></div>
+<div id="toast" class="toast hidden" role="status"></div>
 
 <div id="scoreModal" class="modal hidden">
   <div class="modal-content">
@@ -118,6 +127,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="audio.js"></script>
 <script src="client.js"></script>
 </body>
 </html>

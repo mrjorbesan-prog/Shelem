@@ -118,6 +118,7 @@ function renderChat(state) {
       const bubble = $('chatLatest');
       bubble.textContent = `${latest.name}: ${latest.text}`;
       bubble.classList.remove('hidden');
+      Sfx.play('pop');
       clearTimeout(chatBubbleTimer);
       chatBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), 4000);
     }
@@ -133,6 +134,25 @@ function renderChat(state) {
 $('teamAName').addEventListener('change', () => socket.emit('setTeamName', { team: 'A', name: $('teamAName').value }));
 $('teamBName').addEventListener('change', () => socket.emit('setTeamName', { team: 'B', name: $('teamBName').value }));
 
+const SUIT_CH = { S: '♠', H: '♥', D: '♦', C: '♣' };
+const cardHTML = (card) => `<span class="ci"><b>${RANK_LABEL[card.rank]}</b><i>${SUIT_CH[card.suit]}</i></span><span class="cs">${SUIT_CH[card.suit]}</span>`;
+let toastTimer = null;
+function toast(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+}
+socket.on('notice', (n) => { toast(n.text); if (n.type === 'redeal') Sfx.play('deal'); });
+function paintAudio() {
+  $('musicBtn').classList.toggle('off', !Sfx.music);
+  $('sfxBtn').classList.toggle('off', !Sfx.sfx);
+}
+$('musicBtn').onclick = () => { Sfx.toggleMusic(); paintAudio(); };
+$('sfxBtn').onclick = () => { Sfx.toggleSfx(); paintAudio(); };
+paintAudio();
+let prevPhase = null, prevMyActive = false, prevBids = null, prevTrump = null, prevPlayerCount = -1, prevOffline = 0;
 const POS = { 0: 'bottom', 1: 'right', 2: 'top', 3: 'left' };
 const faNum = (n) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
 const relPos = (seat) => (seat - lastState.mySeat + 4) % 4; // 0 me, 1 right, 2 top, 3 left
@@ -175,6 +195,7 @@ function updateConnBar() {
 }
 socket.on('connect', () => { everConnected = true; rejoin(); updateConnBar(); });
 socket.on('disconnect', (reason) => {
+  Sfx.play('warn');
   if (reason === 'io server disconnect') socket.connect();
   updateConnBar();
 });
@@ -219,6 +240,8 @@ socket.on('leftRoom', () => {
   $('trickArea').innerHTML = '';
   $('trickArea').dataset.sig = '';
   renderedTrickIds = new Set(); trickSeeded = false; gameOverShownKey = -1;
+  prevPhase = null; prevBids = null; prevTrump = null; prevPlayerCount = -1; prevOffline = 0;
+  $('chatBox').classList.add('hidden');
   updateConnBar();
 });
 
@@ -230,6 +253,7 @@ socket.on('trickResult', ({ winnerSeat, points, trickNumber }) => {
   collectingUntil = Date.now() + 460;
   clearTimeout(collectTimer);
   collectTimer = setTimeout(() => { collectingUntil = 0; if (lastState) renderGame(lastState); }, 480);
+  Sfx.play((winnerSeat % 2) === (lastState.mySeat % 2) ? 'good' : 'swish');
   const winner = lastState.players.find((player) => player.seat === winnerSeat);
   const feedback = $('trickFeedback');
   feedback.innerHTML = `<strong>دست ${faNum(trickNumber)}</strong><span>${winner ? escapeHtml(winner.name) : ''} · ${faNum(points)} امتیاز</span>`;
@@ -270,14 +294,20 @@ function triggerTableShake() {
 
 function render(state) {
   $('home').classList.add('hidden');
+  $('chatBox').classList.remove('hidden');
   $('leaveRoomBtn').classList.remove('hidden');
   $('leaveRoomBtn').disabled = false;
   if (state.state === 'lobby') {
     gameOverShownKey = -1;
+    prevPhase = 'lobby'; prevBids = null; prevTrump = null;
+    if (prevPlayerCount >= 0 && state.players.length !== prevPlayerCount) Sfx.play('join');
+    prevPlayerCount = state.players.length;
     $('lobby').classList.remove('hidden');
     $('game').classList.add('hidden');
     renderLobby(state);
+    renderChat(state);
   } else {
+    prevPlayerCount = state.players.length;
     $('lobby').classList.add('hidden');
     $('game').classList.remove('hidden');
     renderGame(state);
@@ -342,6 +372,7 @@ function renderGame(state) {
   if (revealKey && revealKey !== kittyRevealKey) {
     kittyRevealKey = revealKey;
     kittyRevealVisible = true;
+    Sfx.play('reveal');
     setTimeout(() => {
       kittyRevealVisible = false;
       if (lastState && lastState.state === 'kitty') renderGame(lastState);
@@ -366,17 +397,51 @@ function renderGame(state) {
     const nameEl = $('name-' + POS[rel(s)]);
     if (!nameEl) continue;
     const offline = Boolean(pl) && pl.connected === false;
-    nameEl.textContent = pl ? pl.name + (state.hakemSeat === s ? ' 👑' : '') + bidTag(s) + (offline ? ' · قطع' : '') + (activeSeat === s ? ' ⏳' : '') : '';
+    nameEl.innerHTML = pl ? `<span class="av">${escapeHtml(Array.from(pl.name)[0] || '?')}</span><span class="nm">${escapeHtml(pl.name)}</span>${state.hakemSeat === s ? '<em class="tg">👑</em>' : ''}${bidTag(s) ? `<em class="tg">${escapeHtml(bidTag(s).replace(' · ', ''))}</em>` : ''}${offline ? '<em class="tg off">قطع</em>' : ''}${activeSeat === s ? '<em class="tg">⏳</em>' : ''}` : '';
+    nameEl.classList.toggle('mine', (s % 2) === (state.mySeat % 2));
+    nameEl.classList.toggle('opp', (s % 2) !== (state.mySeat % 2));
     nameEl.classList.toggle('turn', Boolean(pl) && activeSeat === s);
     nameEl.classList.toggle('offline', offline);
   }
   const over = state.state === 'roundEnd' || state.state === 'gameOver';
   $('roundInfo').textContent = 'دست ' + faNum(state.history.length + (over ? 0 : 1))
     + (state.hakemSeat !== null && state.bidAmount ? ' · حاکم امتیاز ' + faNum(state.bidAmount) + ' خوانده' : '');
-  $('trumpInfo').textContent = state.trumpSuit ? 'حکم: ' + SUIT_SYM[state.trumpSuit] : '';
+  if (state.trumpSuit) {
+    const ht = (state.hakemSeat || 0) % 2 === 0 ? 'A' : 'B';
+    const ot = ht === 'A' ? 'B' : 'A';
+    const rp = state.roundPoints || { A: 0, B: 0 };
+    const mineHakem = (ht === 'A') === (state.mySeat % 2 === 0);
+    $('trumpInfo').innerHTML = `<span class="tsuit ${state.trumpSuit === 'H' || state.trumpSuit === 'D' ? 'red' : ''}">${SUIT_CH[state.trumpSuit]}</span><span class="tpts"><b class="${mineHakem ? 'blue' : 'redbg'}">${faNum(rp[ht])}/${faNum(state.bidAmount || 0)}</b><b class="${mineHakem ? 'redbg' : 'blue'}">${faNum(rp[ot])}</b></span>`;
+  }
   $('trumpInfo').classList.toggle('hidden', !state.trumpSuit);
   const turnPlayer = state.players.find((player) => player.seat === activeSeat);
   const myActive = activeSeat !== null && activeSeat === state.mySeat;
+  // --- sound events (state transitions) ---
+  if (prevPhase !== null && state.state !== prevPhase) {
+    if (state.state === 'bidding') Sfx.play('deal');
+    else if (state.state === 'kitty') Sfx.play('hakem');
+    else if (state.state === 'roundEnd' || state.state === 'gameOver') {
+      const last = state.history[state.history.length - 1];
+      const myTeam = state.mySeat % 2 === 0 ? 'A' : 'B';
+      const delta = last ? (myTeam === last.hakemTeam ? last.deltaHakem : last.deltaOpp) : 0;
+      if (state.state === 'gameOver') Sfx.play(state.winnerTeam === myTeam ? 'win' : 'lose');
+      else Sfx.play(delta > 0 ? 'chime' : 'sad');
+    }
+  }
+  prevPhase = state.state;
+  if (myActive && !prevMyActive) Sfx.play('turn');
+  prevMyActive = myActive;
+  if (state.state === 'bidding' && state.bidding && state.bidding.bids) {
+    if (prevBids) state.bidding.bids.forEach((v, s) => { if (v !== prevBids[s] && v !== null) Sfx.play(v === 'pass' ? 'pass' : 'bid'); });
+    prevBids = state.bidding.bids.slice();
+  } else prevBids = null;
+  if (state.trumpSuit && !prevTrump && state.state === 'playing') Sfx.play('trump');
+  prevTrump = state.trumpSuit;
+  const offCount = state.players.filter((p) => !p.connected && p.seat !== state.mySeat).length;
+  if (offCount > prevOffline) Sfx.play('warn');
+  prevOffline = offCount;
+  renderFans(state);
+
   if (state.state === 'bidding') {
     $('turnHint').textContent = myActive ? 'نوبت خوانش شماست' : turnPlayer ? 'نوبت خواندن: ' + turnPlayer.name : '';
   } else if (state.state === 'kitty') {
@@ -436,7 +501,8 @@ function renderGame(state) {
           const cutPlay = isNew && isCutPlay(cards, idx, state.trumpSuit);
           if (cutPlay) cut = true;
           d.className = `trick-card at-${POS[rel(entry.seat)]}` + (isRed(entry.card) ? ' red' : '') + (isNew ? ' enter' : '') + (cutPlay ? ' cut-flash' : '');
-          d.textContent = cardLabel(entry.card);
+          d.innerHTML = cardHTML(entry.card);
+          if (isNew) Sfx.play('flick');
           const player = state.players.find((candidate) => candidate.seat === entry.seat);
           if (player) d.title = `${player.name}: ${cardLabel(entry.card)}`;
           trickArea.appendChild(d);
@@ -480,16 +546,18 @@ function renderGame(state) {
     }).join('');
     const opts = $('bidOptions');
     opts.innerHTML = '';
-    for (let v = 100; v <= 165; v += 5) {
+    for (let v = Math.max(100, state.bidding.currentBid + 5); v <= 165; v += 5) {
       const b = document.createElement('button');
+      b.type = 'button';
       b.textContent = v;
-      const disabled = !myTurn || v <= state.bidding.currentBid;
-      if (disabled) b.classList.add('disabledbid');
-      b.disabled = disabled;
-      b.onclick = () => socket.emit('placeBid', { amount: v });
+      b.onclick = () => { Sfx.play('tick'); socket.emit('placeBid', { amount: v }); };
       opts.appendChild(b);
     }
-    $('passBtn').disabled = !myTurn;
+    $('bidMenuInfo').textContent = state.bidding.currentBid ? 'بالاترین رقم تا الان: ' + state.bidding.currentBid : 'هنوز کسی نخوانده؛ حداقل ۱۰۰';
+    $('passBtn').disabled = false;
+    $('bidMenu').classList.toggle('hidden', !myTurn);
+  } else {
+    $('bidMenu').classList.add('hidden');
   }
 
   // kitty panel
@@ -515,32 +583,42 @@ function renderGame(state) {
     $('restartBtn').classList.toggle('hidden', !(gameOver && state.isAdmin));
     $('gameOverNote').classList.toggle('hidden', !(gameOver && !state.isAdmin));
   }
-  if (gameOver && gameOverShownKey !== state.history.length) {
-    gameOverShownKey = state.history.length;
-    $('scoreModal').classList.remove('hidden');
-    renderScoreModal();
-  }
-
   renderChat(state);
 }
 
+const SUIT_ORDER = { S: 0, H: 1, C: 2, D: 3 };
+function layoutHand() {
+  const handEl = $('myHand');
+  const n = handEl.children.length;
+  if (!n) return;
+  const cw = handEl.children[0].offsetWidth || 64;
+  const avail = handEl.clientWidth - 8;
+  const step = n > 1 ? Math.min(cw * 0.78, (avail - cw) / (n - 1)) : cw;
+  handEl.style.setProperty('--ov', Math.max(0, cw - step) + 'px');
+}
+window.addEventListener('resize', layoutHand);
 function renderHand(state, inKitty) {
   const handEl = $('myHand');
   const myTurnToPlay = state.state === 'playing' && state.trick && state.trick.turnSeat === state.mySeat && state.trick.cards.length < 4;
   const legal = myTurnToPlay ? new Set(legalCards(state.myHand, state.trick).map((c) => c.id)) : null;
+  const sorted = state.myHand.slice().sort((a, b) => SUIT_ORDER[a.suit] - SUIT_ORDER[b.suit] || a.rank - b.rank);
   const existing = new Map(Array.from(handEl.children).map((el) => [el.dataset.id, el]));
-  const keep = new Set(state.myHand.map((c) => c.id));
+  const keep = new Set(sorted.map((c) => c.id));
   existing.forEach((el, id) => { if (!keep.has(id)) el.remove(); });
-  state.myHand.forEach((card, idx) => {
+  const n = sorted.length;
+  sorted.forEach((card, idx) => {
     let el = existing.get(card.id);
     if (!el) {
       el = document.createElement('div');
       el.dataset.id = card.id;
-      el.innerHTML = `<div>${RANK_LABEL[card.rank]}</div><div class="suit">${SUIT_SYM[card.suit]}</div>`;
-      el.style.setProperty('--i', idx);
+      el.innerHTML = cardHTML(card);
       el.className = 'card deal-in' + (isRed(card) ? ' red' : '');
       el.addEventListener('animationend', () => el.classList.remove('deal-in'));
     }
+    const d = idx - (n - 1) / 2;
+    el.style.setProperty('--i', idx);
+    el.style.setProperty('--rot', (d * 1.9).toFixed(2) + 'deg');
+    el.style.setProperty('--arc', (d * d * 0.32).toFixed(1) + 'px');
     const isLegal = Boolean(legal) && legal.has(card.id);
     el.classList.toggle('selected', inKitty && selectedKittyCards.includes(card.id));
     el.classList.toggle('playable', isLegal);
@@ -551,15 +629,28 @@ function renderHand(state, inKitty) {
         const i = selectedKittyCards.indexOf(card.id);
         if (i >= 0) selectedKittyCards.splice(i, 1);
         else if (selectedKittyCards.length < 4) selectedKittyCards.push(card.id);
+        Sfx.play('tick');
         if (lastState) renderGame(lastState);
       } else if (isLegal) {
         socket.emit('playCard', { cardId: card.id });
       } else if (myTurnToPlay) {
+        Sfx.play('deny');
         el.classList.remove('deny'); void el.offsetWidth; el.classList.add('deny');
       }
     };
     if (handEl.children[idx] !== el) handEl.insertBefore(el, handEl.children[idx] || null);
   });
+  layoutHand();
+}
+
+function renderFans(state) {
+  for (let s = 0; s < 4; s++) {
+    const r = (s - state.mySeat + 4) % 4;
+    if (r === 0) continue;
+    const el = $('fan-' + POS[r]);
+    const n = Math.min(16, (state.handCounts && state.handCounts[s]) || 0);
+    if (el.dataset.n !== String(n)) { el.dataset.n = String(n); el.innerHTML = '<i class="fb"></i>'.repeat(n); }
+  }
 }
 
 function showPrevTrick() {
@@ -567,14 +658,18 @@ function showPrevTrick() {
   const lt = lastState.lastTrick;
   const winner = lastState.players.find((p) => p.seat === lt.winnerSeat);
   $('prevTrickTitle').textContent = 'دست قبل' + (winner ? ' · برنده: ' + winner.name : '');
-  $('prevTrickCards').innerHTML = lt.cards.map((e) => `<div class="trick-card at-${POS[relPos(e.seat)]}${isRed(e.card) ? ' red' : ''}${e.seat === lt.winnerSeat ? ' winner' : ''}">${cardLabel(e.card)}</div>`).join('');
+  $('prevTrickCards').innerHTML = lt.cards.map((e) => `<div class="trick-card at-${POS[relPos(e.seat)]}${isRed(e.card) ? ' red' : ''}${e.seat === lt.winnerSeat ? ' winner' : ''}">${cardHTML(e.card)}</div>`).join('');
   $('prevTrick').classList.remove('hidden');
 }
 function hidePrevTrick() { $('prevTrick').classList.add('hidden'); }
 const prevBtn = $('prevTrickBtn');
-prevBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); showPrevTrick(); });
-['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => prevBtn.addEventListener(ev, hidePrevTrick));
-prevBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+prevBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  try { prevBtn.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  showPrevTrick();
+});
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => prevBtn.addEventListener(ev, hidePrevTrick));
+['contextmenu', 'selectstart', 'dragstart', 'touchstart', 'touchmove'].forEach((ev) => prevBtn.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
 
 $('restartBtn').onclick = () => socket.emit('restartGame');
 
