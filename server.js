@@ -192,7 +192,7 @@ function leaveOtherRooms(clientId, keepRoomId, currentSocket) {
 }
 
 function publicPlayers(room) {
-  return room.players.map((p) => ({ name: p.name, seat: p.seat, ready: p.ready, connected: p.connected, isAdmin: p.clientId === room.adminClientId }));
+  return room.players.map((p) => ({ name: p.name, seat: p.seat, ready: p.ready, connected: p.connected, isAdmin: p.clientId === room.adminClientId, mic: Boolean(p.mic), vmuted: Boolean(room.vmuted && room.vmuted[p.clientId]) }));
 }
 
 function stateFor(room, clientId) {
@@ -453,6 +453,7 @@ io.on('connection', (socket) => {
       }
       p.socketId = socket.id;
       p.connected = true;
+      p.mic = false; // بعد از اتصال مجدد میکروفن همیشه بسته است
       if (name) p.name = name;
     }
     socket.join(roomId);
@@ -515,6 +516,52 @@ io.on('connection', (socket) => {
       ts.emit('kicked');
     }
     removePlayerFromRoom(room, target.clientId);
+    broadcast(room);
+  });
+
+  // ---------- voice chat (relay only; nothing is stored) ----------
+  const bucket = { tokens: 50, t: Date.now() };
+  const allow = () => {
+    const now = Date.now();
+    bucket.tokens = Math.min(50, bucket.tokens + ((now - bucket.t) / 1000) * 25);
+    bucket.t = now;
+    if (bucket.tokens < 1) return false;
+    bucket.tokens -= 1;
+    return true;
+  };
+  socket.on('voice', (data) => {
+    const room = rooms[socket.data.roomId];
+    if (!room) return;
+    const me = getPlayer(room, socket.data.clientId);
+    if (!me || me.socketId !== socket.id || !me.mic) return;
+    if (room.vmuted && room.vmuted[me.clientId]) return;
+    const len = data && (data.length !== undefined ? data.length : data.byteLength);
+    if (!len || len > 700 || !allow()) return;
+    for (const other of room.players) {
+      if (other.clientId === me.clientId || !other.socketId) continue;
+      const target = io.sockets.sockets.get(other.socketId);
+      if (target) target.volatile.emit('voice', { seat: me.seat, d: data });
+    }
+    if (socket.data.vloop) socket.volatile.emit('voice', { seat: me.seat, d: data });
+  });
+  socket.on('voiceState', ({ on } = {}) => {
+    const room = rooms[socket.data.roomId];
+    if (!room) return;
+    const me = getPlayer(room, socket.data.clientId);
+    if (!me || me.socketId !== socket.id) return;
+    me.mic = Boolean(on) && !(room.vmuted && room.vmuted[me.clientId]);
+    if (!me.mic) socket.data.vloop = false;
+    broadcast(room);
+  });
+  socket.on('voiceLoop', ({ on } = {}) => { socket.data.vloop = Boolean(on); });
+  socket.on('voiceMute', ({ seat, muted } = {}) => {
+    const room = rooms[socket.data.roomId];
+    if (!room || socket.data.clientId !== room.adminClientId) return;
+    const target = room.players.find((p) => p.seat === seat);
+    if (!target || target.clientId === room.adminClientId) return;
+    room.vmuted = room.vmuted || {};
+    room.vmuted[target.clientId] = Boolean(muted);
+    if (muted) target.mic = false;
     broadcast(room);
   });
 
@@ -660,26 +707,6 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
-  // ---- Voice chat: relay-only (no decoding). Validated, rate-limited, volatile (drops when a listener is slow) ----
-  socket.on('voice', (buf) => {
-    if (!Buffer.isBuffer(buf) || buf.length < 5 || buf.length > 1200) return;
-    const room = rooms[socket.data.roomId];
-    if (!room) return;
-    const p = getPlayer(room, socket.data.clientId);
-    if (!p || p.socketId !== socket.id) return;
-    const d = socket.data, now = Date.now();
-    d.vt = Math.min(60, (d.vt === undefined ? 60 : d.vt) + (now - (d.vl || now)) * 0.04); // 40 frames/s, burst 60
-    d.vl = now;
-    if (d.vt < 1) return;
-    d.vt -= 1;
-    for (const q of room.players) {
-      if (q === p || !q.socketId) continue;
-      const s = io.sockets.sockets.get(q.socketId);
-      if (s && !s.data.deaf) s.volatile.emit('voice', p.seat, buf);
-    }
-  });
-  socket.on('voiceDeaf', (v) => { socket.data.deaf = v === true; });
-
   socket.on('leaveRoom', () => {
     const room = rooms[socket.data.roomId];
     const clientId = socket.data.clientId;
@@ -699,7 +726,7 @@ io.on('connection', (socket) => {
     const room = rooms[socket.data.roomId];
     if (!room) return;
     const p = getPlayer(room, socket.data.clientId);
-    if (p && p.socketId === socket.id) { p.connected = false; p.socketId = null; room.lastActive = Date.now(); }
+    if (p && p.socketId === socket.id) { p.connected = false; p.mic = false; p.socketId = null; room.lastActive = Date.now(); }
     broadcast(room);
   });
 });
