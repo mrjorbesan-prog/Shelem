@@ -660,6 +660,26 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
+  // ---- Voice chat: relay-only (no decoding). Validated, rate-limited, volatile (drops when a listener is slow) ----
+  socket.on('voice', (buf) => {
+    if (!Buffer.isBuffer(buf) || buf.length < 5 || buf.length > 1200) return;
+    const room = rooms[socket.data.roomId];
+    if (!room) return;
+    const p = getPlayer(room, socket.data.clientId);
+    if (!p || p.socketId !== socket.id) return;
+    const d = socket.data, now = Date.now();
+    d.vt = Math.min(60, (d.vt === undefined ? 60 : d.vt) + (now - (d.vl || now)) * 0.04); // 40 frames/s, burst 60
+    d.vl = now;
+    if (d.vt < 1) return;
+    d.vt -= 1;
+    for (const q of room.players) {
+      if (q === p || !q.socketId) continue;
+      const s = io.sockets.sockets.get(q.socketId);
+      if (s && !s.data.deaf) s.volatile.emit('voice', p.seat, buf);
+    }
+  });
+  socket.on('voiceDeaf', (v) => { socket.data.deaf = v === true; });
+
   socket.on('leaveRoom', () => {
     const room = rooms[socket.data.roomId];
     const clientId = socket.data.clientId;
