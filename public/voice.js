@@ -45,7 +45,7 @@ const Voice = (() => {
 
   let socket = null, toast = () => {}, onChange = () => {}, getMySeat = () => -1;
   let vctx = null, stream = null, srcNode = null, procNode = null, silentGain = null, wake = null;
-  let open = false, opening = false, forced = false, loop = false, sending = false, gen = 0, workletReady = false;
+  let deaf = false, open = false, opening = false, forced = false, loop = false, sending = false, gen = 0, workletReady = false;
   const speakers = new Map();      // seat -> { next, seq, last, gain }
   const muted = new Set();         // player names muted locally
   let enc = { p: 0, i: 0 }, seq = 0, noise = null, hang = 0, prev = [], lvl = 0;
@@ -102,13 +102,7 @@ const Voice = (() => {
     try {
       const ctx = ensureCtx();
       if (!ctx) throw new Error('noaudio');
-      const gum = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
-      let s;
-      try { s = await gum(); } catch (e0) {
-        // prompt dismissed (not hard-denied): ask again once
-        let st = ''; try { st = (await navigator.permissions.query({ name: 'microphone' })).state; } catch (x) { /* ignore */ }
-        if (e0 && e0.name === 'NotAllowedError' && st === 'prompt' && my === gen) s = await gum(); else throw e0;
-      }
+      const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
       if (my !== gen) { s.getTracks().forEach((t) => t.stop()); return; }
       stream = s;
       s.getAudioTracks()[0].addEventListener('ended', () => { if (stream === s) { closeMic(); toast('میکروفون قطع شد'); } });
@@ -141,7 +135,12 @@ const Voice = (() => {
     } catch (e) {
       stopNodes();
       const n = e && e.name;
-      toast(n === 'NotAllowedError' || n === 'SecurityError' ? 'برای استفاده از میکروفون، اجازهٔ دسترسی را بدهید (آیکن قفل کنار آدرس ← میکروفون ← اجازه) و دوباره امتحان کنید' : n === 'NotFoundError' ? 'میکروفونی پیدا نشد' : 'میکروفون باز نشد');
+      if (n === 'NotAllowedError' || n === 'SecurityError') {
+        let st = 'denied';
+        try { if (navigator.permissions) st = (await navigator.permissions.query({ name: 'microphone' })).state; } catch (err) { /* unsupported */ }
+        if (st === 'prompt') toast('برای استفاده از ویس چت، در پنجره مرورگر «اجازه» را بزنید و دوباره روی میکروفون بزنید');
+        else toast('میکروفون برای این سایت مسدود است. روی 🔒 کنار آدرس بزنید ← دسترسی‌ها (Permissions) ← میکروفون را «اجازه» کنید و دوباره امتحان کنید', 9000);
+      } else toast(n === 'NotFoundError' ? 'میکروفونی پیدا نشد' : 'میکروفون باز نشد');
     } finally {
       opening = false; onChange();
     }
@@ -166,8 +165,8 @@ const Voice = (() => {
 
   function play(seat, d) {
     if (!vctx || vctx.state === 'closed') return;
+    if (deaf) return;
     if (seat === getMySeat() && !loop) return;
-    if (deaf && seat !== getMySeat()) return;
     const name = names[seat];
     if (name && muted.has(name)) return;
     if (vctx.state === 'suspended') vctx.resume().catch(() => {});
@@ -187,7 +186,7 @@ const Voice = (() => {
     sp.next += FRAME / RATE;
   }
 
-  let names = {}, deaf = false;
+  let names = {};
   return {
     init(opts) {
       socket = opts.socket; toast = opts.toast; onChange = opts.onChange; getMySeat = opts.getMySeat;
@@ -199,13 +198,13 @@ const Voice = (() => {
     },
     open: openMic,
     close: closeMic,
-    status: () => ({ open, opening, sending, forced, loop, level: lvl }),
+    status: () => ({ deaf, open, opening, sending, forced, loop, level: lvl }),
     isTalking: (seat) => { const s = speakers.get(seat); return Boolean(s) && performance.now() - s.last < 350; },
     setNames(list) { names = {}; list.forEach((p) => { names[p.seat] = p.name; }); },
     setForced(v) { if (v && !forced) { closeMic(); } forced = v; onChange(); },
     toggleMute(name) { if (muted.has(name)) muted.delete(name); else muted.add(name); return muted.has(name); },
     isMuted: (name) => muted.has(name),
-    toggleDeaf() { deaf = !deaf; if (deaf) speakers.forEach((s) => { s.last = 0; s.next = 0; try { s.gain.disconnect(); } catch (e) { /* ignore */ } s.gain = vctx.createGain(); s.gain.connect(vctx.destination); }); return deaf; },
+    setDeaf(v) { deaf = Boolean(v); onChange(); },
     setLoop(v) { loop = Boolean(v) && open; if (socket && socket.connected) socket.emit('voiceLoop', { on: loop }); onChange(); },
     _codec: { encodeFrame, decodeFrame, FRAME, PACKET },
   };
