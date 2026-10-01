@@ -147,7 +147,6 @@ function setChatExpanded(expanded) {
     $('chatLatest').classList.add('hidden');
     if (lastState) renderChat(lastState);
     $('chatMessages').scrollTop = $('chatMessages').scrollHeight;
-    $('chatInput').focus();
   }
 }
 function renderChat(state) {
@@ -185,12 +184,12 @@ $('teamBName').addEventListener('change', () => socket.emit('setTeamName', { tea
 const SUIT_CH = { S: '♠', H: '♥', D: '♦', C: '♣' };
 const cardHTML = (card) => `<span class="ci"><b>${RANK_LABEL[card.rank]}</b><i>${SUIT_CH[card.suit]}</i></span><span class="cs">${SUIT_CH[card.suit]}</span>`;
 let toastTimer = null;
-function toast(text) {
+function toast(text, ms) {
   const el = $('toast');
   el.textContent = text;
   el.classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), ms || 3200);
 }
 socket.on('kicked', () => toast('مدیر روم شما را از روم خارج کرد'));
 socket.on('notice', (n) => { toast(n.text); if (n.type === 'redeal') Sfx.play('deal'); });
@@ -200,6 +199,7 @@ function paintAudio() {
 }
 $('musicBtn').onclick = () => { Sfx.toggleMusic(); paintAudio(); };
 $('sfxBtn').onclick = () => { Sfx.toggleSfx(); paintAudio(); };
+$('deafBtn').onclick = () => { const d = !Voice.status().deaf; Voice.setDeaf(d); $('deafBtn').classList.toggle('deaf', d); toast(d ? 'صدای همه برای شما قطع شد' : 'صدای بقیه دوباره باز شد'); };
 paintAudio();
 const baseTitle = document.title;
 function paintMic() {
@@ -211,7 +211,7 @@ function paintMic() {
     btn.className = 'mic-btn ' + cls;
     btn.querySelector('.mic-ico').textContent = v.open ? '🎙' : '🎤';
     btn.querySelector('.mic-txt').textContent = v.forced ? 'بسته شده توسط مدیر' : v.opening ? 'در حال باز شدن…' : v.open ? 'میکروفون باز' : 'میکروفون بسته';
-    btn.querySelector('.mic-sub').textContent = v.forced ? '' : v.open ? (v.sending ? '🔴 در حال ارسال صدا' : 'ساکت — ارسال نمی‌شود') : 'لمس: باز/بسته · نگه‌داشتن: صحبت';
+    btn.querySelector('.mic-sub').textContent = v.forced ? '' : v.open ? (v.sending ? '🔴 در حال ارسال صدا' : 'ساکت — ارسال نمی‌شود') : 'لمس / نگه‌داشتن';
     document.body.classList.toggle('mic-open', v.open);
     document.title = (v.open ? '🔴 ' : '') + baseTitle;
     $('micTest').classList.toggle('hidden', !v.open);
@@ -350,6 +350,7 @@ socket.on('leftRoom', () => {
   renderedTrickIds = new Set(); trickSeeded = false; gameOverShownKey = -1;
   prevPhase = null; prevBids = null; prevTrump = null; prevPlayerCount = -1; prevOffline = 0;
   $('chatBox').classList.add('hidden');
+  document.documentElement.classList.remove('in-game');
   Voice.close();
   $('micWrap').classList.add('hidden');
   updateConnBar();
@@ -420,12 +421,14 @@ function render(state) {
     prevPlayerCount = state.players.length;
     $('lobby').classList.remove('hidden');
     $('game').classList.add('hidden');
+    document.documentElement.classList.remove('in-game');
     renderLobby(state);
     renderChat(state);
   } else {
     prevPlayerCount = state.players.length;
     $('lobby').classList.add('hidden');
     $('game').classList.remove('hidden');
+    document.documentElement.classList.add('in-game');
     renderGame(state);
   }
   if (!$('scoreModal').classList.contains('hidden')) renderScoreModal();

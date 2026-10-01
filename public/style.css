@@ -645,3 +645,13 @@ body.mic-open::before { content:''; position:fixed; top:0; left:0; right:0; heig
   #chatBox { left:108px; } .audio-btns { left:148px; gap:4px; }
   .mic-btn { min-width:96px; padding:3px 8px; } .mic-txt { font-size:11px; }
 }
+
+/* v10 */
+html.in-game, html.in-game body { overflow:hidden; height:100%; }
+.audio-btns button.deaf { background:#8a2a34; border-color:#ff8a95; opacity:1; text-decoration:none; position:relative; }
+.audio-btns button.deaf::after { content:''; position:absolute; left:20%; right:20%; top:50%; height:3px; background:#fff; transform:rotate(-40deg); border-radius:2px; }
+@media (max-width:430px) {
+  #chatToggle, .audio-btns button { width:34px; height:34px; font-size:15px; }
+  #chatBox { left:108px; } .audio-btns { left:148px; gap:4px; }
+  .mic-btn { min-width:90px; padding:3px 8px; } .mic-txt { font-size:11px; }
+}
