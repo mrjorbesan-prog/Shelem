@@ -111,7 +111,8 @@
   </div>
 
 <button id="leaveRoomBtn" class="leave-room hidden" type="button">&#x062E;&#x0631;&#x0648;&#x062C; &#x0627;&#x0632; &#x0631;&#x0648;&#x0645;</button>
-<div class="audio-btns"><button id="musicBtn" type="button" aria-label="موزیک">🎵</button><button id="sfxBtn" type="button" aria-label="افکت صوتی">🔊</button></div>
+<div class="audio-btns"><button id="musicBtn" type="button" aria-label="موزیک">🎵</button><button id="sfxBtn" type="button" aria-label="افکت صوتی">🔊</button><button id="micBtn" class="hidden" type="button" aria-label="میکروفون" aria-pressed="false" title="نگه دارید تا صحبت کنید، یا کلیک کنید تا باز/بسته شود (کلید V)">🎤</button><button id="spkBtn" class="hidden" type="button" aria-label="شنیدن صدای بازیکنان" aria-pressed="true" title="شنیدن صدای بازیکنان">🎧</button></div>
+<div id="voiceSpeak" class="voice-speak" aria-live="off"></div>
 <div id="toast" class="toast hidden" role="status"></div>
 
 <div id="adminModal" class="modal hidden">
@@ -140,5 +141,6 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="audio.js"></script>
 <script src="client.js"></script>
+<script src="voice.js"></script>
 </body>
 </html>

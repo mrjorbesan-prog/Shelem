@@ -617,3 +617,16 @@ body.has-conn-bar #game { padding-top:34px; }
 #game .round-status { width:100%; }
 #game .round-heading { flex:1 1 0; min-width:0; }
 #game .round-heading > #roundInfo { flex:1 1 auto; }
+
+/* ---- voice chat ---- */
+#micBtn, #spkBtn { touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+#micBtn.warm { border-color:rgba(231,189,98,.9); }
+#micBtn.pending { opacity:.6; }
+#micBtn.live { background:#14532d; border-color:#4ade80; box-shadow:0 0 0 0 rgba(74,222,128,.6); animation:micPulse 1.4s ease-out infinite; }
+#micBtn.talking { background:#7f1d1d; border-color:#f87171; }
+#spkBtn.off { opacity:.45; text-decoration:line-through; }
+@keyframes micPulse { 0% { box-shadow:0 0 0 0 rgba(74,222,128,.55); } 100% { box-shadow:0 0 0 12px rgba(74,222,128,0); } }
+.voice-speak { position:fixed; z-index:60; top:58px; left:12px; display:flex; flex-direction:column; align-items:flex-start; gap:4px; pointer-events:none; }
+body.has-conn-bar .voice-speak { top:86px; }
+.voice-speak span { padding:3px 10px; border-radius:12px; font-size:12px; background:rgba(8,12,30,.88); color:#fff; border:1px solid rgba(74,222,128,.7); }
+.voice-speak span.me { border-color:rgba(248,113,113,.8); }

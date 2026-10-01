@@ -2,7 +2,8 @@
 const Sfx = (() => {
   const store = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v === '1'; } catch (e) { return d; } };
   const save = (k, v) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch (e) { /* ignore */ } };
-  let ctx = null, sfxBus, musicBus, musicIn, noiseBuf;
+  let ctx = null, sfxBus, musicBus, musicIn, noiseBuf, duckGain, ducked = false;
+  const DUCK = 0.2;
   let musicOn = store('shelem_music', true), sfxOn = store('shelem_sfx', true);
   let chordTimer = null, pluckTimer = null, chordIdx = 0, running = false;
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -11,7 +12,8 @@ const Sfx = (() => {
     ctx = c;
     const master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
     sfxBus = ctx.createGain(); sfxBus.gain.value = sfxOn ? 1 : 0; sfxBus.connect(master);
-    musicBus = ctx.createGain(); musicBus.gain.value = musicOn ? 1 : 0; musicBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.gain.value = musicOn ? 1 : 0;
+    duckGain = ctx.createGain(); duckGain.gain.value = ducked ? DUCK : 1; musicBus.connect(duckGain); duckGain.connect(master);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1700; lp.connect(musicBus);
     musicIn = ctx.createGain(); musicIn.gain.value = 0.085; musicIn.connect(lp);
     const len = Math.floor(ctx.sampleRate * 3.2);
@@ -110,6 +112,12 @@ const Sfx = (() => {
   return {
     get music() { return musicOn; },
     get sfx() { return sfxOn; },
+    // lowers music while voice chat is audible (smooth ramp; safe to call before audio is unlocked)
+    duck(on) {
+      ducked = !!on;
+      if (!ctx || !duckGain) return;
+      try { duckGain.gain.setTargetAtTime(ducked ? DUCK : 1, ctx.currentTime, ducked ? 0.06 : 0.3); } catch (e) { /* ignore */ }
+    },
     play(name) {
       if (!ctx || !sfxOn || !SFX[name]) return;
       if (ctx.state === 'suspended') ctx.resume();
