@@ -96,6 +96,9 @@ function renderAdmin() {
       };
       if (!pl.isAdmin) {
         const kb = el.appendChild(document.createElement('button'));
+        const mb = el.appendChild(document.createElement('button'));
+        mb.className = 'mute-btn'; mb.type = 'button'; mb.textContent = pl.vmuted ? '🔇' : '🎙'; mb.title = pl.vmuted ? 'باز کردن میکروفون' : 'بستن میکروفون';
+        mb.onclick = (ev) => { ev.stopPropagation(); socket.emit('voiceMute', { seat: s, muted: !pl.vmuted }); };
         kb.className = 'kick-btn'; kb.type = 'button'; kb.textContent = '✖';
         kb.onclick = (ev) => {
           ev.stopPropagation();
@@ -198,6 +201,66 @@ function paintAudio() {
 $('musicBtn').onclick = () => { Sfx.toggleMusic(); paintAudio(); };
 $('sfxBtn').onclick = () => { Sfx.toggleSfx(); paintAudio(); };
 paintAudio();
+const baseTitle = document.title;
+function paintMic() {
+  const v = Voice.status();
+  const btn = $('micBtn');
+  const cls = v.forced ? 'forced' : v.opening ? 'opening' : v.open ? (v.sending ? 'open sending' : 'open') : 'closed';
+  if (btn.dataset.k !== cls + '|' + v.loop) {
+    btn.dataset.k = cls + '|' + v.loop;
+    btn.className = 'mic-btn ' + cls;
+    btn.querySelector('.mic-ico').textContent = v.open ? '🎙' : '🎤';
+    btn.querySelector('.mic-txt').textContent = v.forced ? 'بسته شده توسط مدیر' : v.opening ? 'در حال باز شدن…' : v.open ? 'میکروفون باز' : 'میکروفون بسته';
+    btn.querySelector('.mic-sub').textContent = v.forced ? '' : v.open ? (v.sending ? '🔴 در حال ارسال صدا' : 'ساکت — ارسال نمی‌شود') : 'لمس: باز/بسته · نگه‌داشتن: صحبت';
+    document.body.classList.toggle('mic-open', v.open);
+    document.title = (v.open ? '🔴 ' : '') + baseTitle;
+    $('micTest').classList.toggle('hidden', !v.open);
+    $('micTest').classList.toggle('on', v.loop);
+  }
+  const subEl = btn.querySelector('.mic-sub');
+  if (v.open && !v.forced) { const t = v.sending ? '🔴 در حال ارسال صدا' : 'ساکت — ارسال نمی‌شود'; if (subEl.textContent !== t) subEl.textContent = t; }
+  if (lastState) {
+    for (const p of lastState.players) {
+      const el = document.getElementById('name-' + POS[(p.seat - lastState.mySeat + 4) % 4]);
+      if (el) el.classList.toggle('talking', p.seat === lastState.mySeat ? v.sending : Voice.isTalking(p.seat));
+    }
+  }
+}
+Voice.init({ socket, toast, onChange: paintMic, getMySeat: () => (lastState ? lastState.mySeat : -1) });
+(() => {
+  const btn = $('micBtn');
+  let down = null;
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    try { btn.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    const v = Voice.status();
+    down = { t: Date.now(), wasOpen: v.open || v.opening };
+    if (!down.wasOpen) Voice.open();
+  });
+  const up = (e) => {
+    if (!down) return;
+    const d = down; down = null;
+    if (e.type !== 'pointerup' && Voice.status().opening) return; // permission prompt stole the gesture: keep opening
+    if (d.wasOpen || Date.now() - d.t >= 350) Voice.close();       // tap on open mic = close; hold = push-to-talk release
+  };
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => btn.addEventListener(ev, up));
+  ['contextmenu', 'selectstart', 'dragstart', 'touchstart', 'touchmove'].forEach((ev) => btn.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+  $('micTest').onclick = () => {
+    const on = !Voice.status().loop;
+    Voice.setLoop(on);
+    if (on) toast('صدای خودتان را با کمی تأخیر می‌شنوید؛ برای تست از هدفون استفاده کنید');
+  };
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest && e.target.closest('#game .pname');
+    if (!el || !lastState) return;
+    const seat = Number(el.dataset.seat);
+    const pl = lastState.players.find((p) => p.seat === seat);
+    if (!pl || seat === lastState.mySeat) return;
+    const m = Voice.toggleMute(pl.name);
+    toast(m ? `${pl.name} فقط برای شما بی‌صدا شد` : `صدای ${pl.name} دوباره باز شد`);
+    renderGame(lastState);
+  });
+})();
 let prevPhase = null, prevMyActive = false, prevBids = null, prevTrump = null, prevPlayerCount = -1, prevOffline = 0;
 const POS = { 0: 'bottom', 1: 'right', 2: 'top', 3: 'left' };
 const faNum = (n) => String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]);
@@ -287,6 +350,8 @@ socket.on('leftRoom', () => {
   renderedTrickIds = new Set(); trickSeeded = false; gameOverShownKey = -1;
   prevPhase = null; prevBids = null; prevTrump = null; prevPlayerCount = -1; prevOffline = 0;
   $('chatBox').classList.add('hidden');
+  Voice.close();
+  $('micWrap').classList.add('hidden');
   updateConnBar();
 });
 
@@ -340,6 +405,12 @@ function triggerTableShake() {
 function render(state) {
   $('home').classList.add('hidden');
   $('chatBox').classList.remove('hidden');
+  $('micWrap').classList.remove('hidden');
+  Voice.setNames(state.players);
+  const meP = state.players.find((p) => p.seat === state.mySeat);
+  const wasForced = Voice.status().forced;
+  Voice.setForced(Boolean(meP && meP.vmuted));
+  if (meP && meP.vmuted && !wasForced) toast('مدیر میکروفون شما را بست');
   $('leaveRoomBtn').classList.remove('hidden');
   $('leaveRoomBtn').disabled = false;
   if (state.state === 'lobby') {
@@ -449,7 +520,8 @@ function renderGame(state) {
     const nameEl = $('name-' + POS[rel(s)]);
     if (!nameEl) continue;
     const offline = Boolean(pl) && pl.connected === false;
-    nameEl.innerHTML = pl ? `<span class="nm">${escapeHtml(pl.name)}</span>${state.hakemSeat === s ? '<em class="tg">👑</em>' : ''}${bidTag(s) ? `<em class="tg">${escapeHtml(bidTag(s).replace(' · ', ''))}</em>` : ''}${offline ? '<em class="tg off">قطع</em>' : ''}${activeSeat === s ? '<em class="tg">⏳</em>' : ''}` : '';
+    nameEl.innerHTML = pl ? `<span class="nm">${escapeHtml(pl.name)}</span>${state.hakemSeat === s ? '<em class="tg">👑</em>' : ''}${bidTag(s) ? `<em class="tg">${escapeHtml(bidTag(s).replace(' · ', ''))}</em>` : ''}${offline ? '<em class="tg off">قطع</em>' : ''}${pl.mic && s !== state.mySeat ? '<em class=\"tg\">🎙</em>' : ''}${Voice.isMuted(pl.name) ? '<em class=\"tg off\">🔇</em>' : ''}${activeSeat === s ? '<em class="tg">⏳</em>' : ''}` : '';
+    nameEl.dataset.seat = String(s);
     nameEl.classList.toggle('mine', (s % 2) === (state.mySeat % 2));
     nameEl.classList.toggle('opp', (s % 2) !== (state.mySeat % 2));
     nameEl.classList.toggle('turn', Boolean(pl) && activeSeat === s);

@@ -618,15 +618,30 @@ body.has-conn-bar #game { padding-top:34px; }
 #game .round-heading { flex:1 1 0; min-width:0; }
 #game .round-heading > #roundInfo { flex:1 1 auto; }
 
-/* ---- voice chat ---- */
-#micBtn, #spkBtn { touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
-#micBtn.warm { border-color:rgba(231,189,98,.9); }
-#micBtn.pending { opacity:.6; }
-#micBtn.live { background:#14532d; border-color:#4ade80; box-shadow:0 0 0 0 rgba(74,222,128,.6); animation:micPulse 1.4s ease-out infinite; }
-#micBtn.talking { background:#7f1d1d; border-color:#f87171; }
-#spkBtn.off { opacity:.45; text-decoration:line-through; }
-@keyframes micPulse { 0% { box-shadow:0 0 0 0 rgba(74,222,128,.55); } 100% { box-shadow:0 0 0 12px rgba(74,222,128,0); } }
-.voice-speak { position:fixed; z-index:60; top:58px; left:12px; display:flex; flex-direction:column; align-items:flex-start; gap:4px; pointer-events:none; }
-body.has-conn-bar .voice-speak { top:86px; }
-.voice-speak span { padding:3px 10px; border-radius:12px; font-size:12px; background:rgba(8,12,30,.88); color:#fff; border:1px solid rgba(74,222,128,.7); }
-.voice-speak span.me { border-color:rgba(248,113,113,.8); }
+/* ===== voice chat: unmistakable mic state ===== */
+.mic-wrap { position:fixed; z-index:61; top:12px; right:12px; }
+body.has-conn-bar .mic-wrap { top:40px; }
+.mic-btn { display:flex; flex-direction:column; align-items:center; gap:1px; min-width:104px; padding:4px 10px; border-radius:14px; border:2px solid #5c6178; background:#1a1d2e; color:#9aa0b8; font-weight:bold; box-shadow:none; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; outline:none; }
+.mic-main { display:flex; align-items:center; gap:5px; }
+.mic-ico { position:relative; font-size:16px; line-height:1; }
+.mic-txt { font-size:12px; line-height:1.2; white-space:nowrap; }
+.mic-sub { font-size:9px; line-height:1.2; opacity:.9; white-space:nowrap; }
+.mic-btn.closed .mic-ico::after { content:''; position:absolute; left:-3px; right:-3px; top:50%; height:3px; margin-top:-1px; background:#ff4d5e; transform:rotate(-38deg); border-radius:2px; }
+.mic-btn.open { background:#c91f2e; border-color:#ff8a95; color:#fff; animation:micPulse 1.4s ease-in-out infinite; }
+.mic-btn.open.sending { background:#e5182b; box-shadow:0 0 0 3px #fff, 0 0 18px 6px rgba(255,45,63,.9); }
+.mic-btn.opening { border-color:#e7bd62; color:#ffe4a4; }
+.mic-btn.forced { opacity:.65; border-color:#8a2a34; }
+body.mic-open::before { content:''; position:fixed; top:0; left:0; right:0; height:4px; background:#ff2d3f; z-index:300; animation:micPulse 1.4s ease-in-out infinite; }
+@keyframes micPulse { 50% { filter:brightness(1.35); } }
+.mic-test { padding:5px 10px; font-size:12px; border-radius:10px; background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.25); margin-bottom:6px; box-shadow:none; }
+.mic-test.on { background:#8a5a12; border-color:#e7bd62; }
+#game .pname.talking { outline:3px solid #46e07a; outline-offset:2px; }
+#game .pname { cursor:pointer; }
+.mute-btn { position:absolute; top:4px; right:4px; width:22px; height:22px; padding:0; border-radius:50%; font-size:11px; line-height:22px; background:#2a3a66; color:#fff; border:none; box-shadow:none; }
+#game .topbar { padding-top:64px; }
+#lobby, #home { padding-top:70px; }
+@media (max-width:400px) {
+  #chatToggle, .audio-btns button { width:34px; height:34px; font-size:15px; }
+  #chatBox { left:108px; } .audio-btns { left:148px; gap:4px; }
+  .mic-btn { min-width:96px; padding:3px 8px; } .mic-txt { font-size:11px; }
+}
