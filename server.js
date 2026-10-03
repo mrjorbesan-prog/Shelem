@@ -212,7 +212,7 @@ function leaveOtherRooms(clientId, keepRoomId, currentSocket) {
 }
 
 function publicPlayers(room) {
-  return room.players.map((p) => ({ name: p.name, seat: p.seat, ready: p.ready, connected: p.connected, isAdmin: p.clientId === room.adminClientId, mic: Boolean(p.mic), vmuted: Boolean(room.vmuted && room.vmuted[p.clientId]) }));
+  return room.players.map((p) => ({ name: p.name, seat: p.seat, ready: p.ready, connected: p.connected, isAdmin: p.clientId === room.adminClientId, mic: Boolean(p.mic), opus: Boolean(p.opus), vmuted: Boolean(room.vmuted && room.vmuted[p.clientId]) }));
 }
 
 function stateFor(room, clientId) {
@@ -243,6 +243,7 @@ function stateFor(room, clientId) {
     chat: room.chat.slice(-50),
     paused: Boolean(room.saved),
     targetScore: room.targetScore,
+    adult: Boolean(room.adult),
     winnerTeam: room.winnerTeam,
     lastTrick: room.lastTrick,
   };
@@ -488,7 +489,11 @@ io.on('connection', (socket) => {
     if (getPlayer(room, socket.data.clientId).clientId !== room.adminClientId) return;
     const pa = room.players.find((p) => p.seat === seatA);
     const pb = room.players.find((p) => p.seat === seatB);
+    const ok = (n) => Number.isInteger(n) && n >= 0 && n < 4;
+    if (!ok(seatA) || !ok(seatB) || seatA === seatB) return;
     if (pa && pb) { pa.seat = seatB; pb.seat = seatA; }
+    else if (pa) pa.seat = seatB;      // move a player to an empty seat
+    else if (pb) pb.seat = seatA;
     broadcast(room);
   });
 
@@ -497,6 +502,13 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (socket.data.clientId !== room.adminClientId) return;
     if (team === 'A' || team === 'B') room.teamNames[team] = String(name).slice(0, 20) || room.teamNames[team];
+    broadcast(room);
+  });
+
+  socket.on('setAdult', ({ on } = {}) => {
+    const room = rooms[socket.data.roomId];
+    if (!room || socket.data.clientId !== room.adminClientId) return;
+    room.adult = Boolean(on);
     broadcast(room);
   });
 
@@ -560,9 +572,13 @@ io.on('connection', (socket) => {
     for (const other of room.players) {
       if (other.clientId === me.clientId || !other.socketId) continue;
       const target = io.sockets.sockets.get(other.socketId);
-      if (target) target.volatile.emit('voice', { seat: me.seat, d: data });
+      if (target) {
+        const wb = target.conn && target.conn.writeBuffer;
+        if (wb && wb.length > 15) continue;   // that client is backed up: skip rather than queue stale audio
+        target.emit('voice', { seat: me.seat, d: data });
+      }
     }
-    if (socket.data.vloop) socket.volatile.emit('voice', { seat: me.seat, d: data });
+    if (socket.data.vloop) socket.emit('voice', { seat: me.seat, d: data });
   });
   socket.on('voiceState', ({ on } = {}) => {
     const room = rooms[socket.data.roomId];
@@ -571,6 +587,14 @@ io.on('connection', (socket) => {
     if (!me || me.socketId !== socket.id) return;
     me.mic = Boolean(on) && !(room.vmuted && room.vmuted[me.clientId]);
     if (!me.mic) socket.data.vloop = false;
+    broadcast(room);
+  });
+  socket.on('voiceCaps', ({ opus } = {}) => {
+    const room = rooms[socket.data.roomId];
+    if (!room) return;
+    const me = getPlayer(room, socket.data.clientId);
+    if (!me || me.socketId !== socket.id) return;
+    me.opus = Boolean(opus);
     broadcast(room);
   });
   socket.on('voiceLoop', ({ on } = {}) => { socket.data.vloop = Boolean(on); });
