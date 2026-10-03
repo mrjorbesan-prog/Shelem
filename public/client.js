@@ -148,15 +148,32 @@ function sendChat() {
   $('chatInput').value = '';
 }
 const QUICK = ['دستخوش!', 'بنازم!', 'اینکاره نیستی!', 'نوبی!', 'بدو!', 'دست بجنبون.'];
-(() => {
+const QUICK_ADULT = ['کیرم تو این دست', 'کیر تو ته‌دست', 'رفت درمون', 'رفت درتون'];
+let quickAdult = null;
+function renderQuick(adult) {
+  if (quickAdult === adult) return;
+  quickAdult = adult;
   const q = document.getElementById('quickChat');
-  QUICK.forEach((t) => {
+  q.innerHTML = '';
+  (adult ? QUICK.concat(QUICK_ADULT) : QUICK).forEach((t) => {
     const b = document.createElement('button');
     b.type = 'button'; b.textContent = t;
     b.onclick = () => { socket.emit('chatMessage', { text: t }); setChatExpanded(false); };
     q.appendChild(b);
   });
-})();
+}
+renderQuick(false);
+function paintAdult(state) {
+  const on = Boolean(state.adult);
+  renderQuick(on);
+  for (const id of ['adultBtn', 'adultBtn2']) {
+    const b = document.getElementById(id);
+    b.textContent = on ? '🔞 حالت +۱۸: روشن' : '🔞 حالت +۱۸: خاموش';
+    b.classList.toggle('on', on);
+    b.disabled = !state.isAdmin;
+    b.onclick = () => socket.emit('setAdult', { on: !on });
+  }
+}
 let chatExpanded = false, chatSeenT = null, chatKey = '', chatBubbleTimer = null;
 function setChatExpanded(expanded) {
   chatExpanded = expanded;
@@ -240,9 +257,14 @@ function paintMic() {
   const subEl = btn.querySelector('.mic-sub');
   if (v.open && !v.forced) { const t = v.sending ? '🔴 در حال ارسال صدا' : 'ساکت — ارسال نمی‌شود'; if (subEl.textContent !== t) subEl.textContent = t; }
   if (lastState) {
-    for (const p of lastState.players) {
-      const el = document.getElementById('name-' + POS[(p.seat - lastState.mySeat + 4) % 4]);
-      if (el) el.classList.toggle('talking', p.seat === lastState.mySeat ? v.sending : Voice.isTalking(p.seat));
+    const flags = lastState.players.map((p) => (p.seat === lastState.mySeat ? v.sending : Voice.isTalking(p.seat)));
+    const key = lastState.players.map((p, k) => p.seat + (flags[k] ? 'y' : 'n')).join(',') + '|' + lastState.mySeat;
+    if (key !== paintMic.key) {
+      paintMic.key = key;
+      lastState.players.forEach((p, k) => {
+        const el = document.getElementById('name-' + POS[(p.seat - lastState.mySeat + 4) % 4]);
+        if (el) el.classList.toggle('talking', flags[k]);
+      });
     }
   }
 }
@@ -265,6 +287,13 @@ Voice.init({ socket, toast, onChange: paintMic, getMySeat: () => (lastState ? la
   };
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => btn.addEventListener(ev, up));
   ['contextmenu', 'selectstart', 'dragstart', 'touchstart', 'touchmove'].forEach((ev) => btn.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+  const paintHeadset = () => { const on = Voice.status().headset; $('headsetBtn').textContent = on ? '🎧 حالت هدفون: روشن' : '🎧 حالت هدفون: خاموش'; $('headsetBtn').classList.toggle('on', on); };
+  paintHeadset();
+  $('headsetBtn').onclick = () => {
+    const on = !Voice.status().headset;
+    Voice.setHeadset(on); paintHeadset();
+    toast(on ? 'حالت هدفون: اکو و نویزگیر مرورگر خاموش می‌شود (صدای بازی هنگام باز و بسته شدن میکروفون نمی‌پرد). فقط با هدفون استفاده کنید؛ از دفعه بعد که میکروفون را باز می‌کنید اعمال می‌شود' : 'حالت هدفون خاموش شد؛ از دفعه بعد که میکروفون را باز می‌کنید اعمال می‌شود', 6000);
+  };
   $('micTest').onclick = () => {
     const on = !Voice.status().loop;
     Voice.setLoop(on);
@@ -427,6 +456,7 @@ function render(state) {
   $('chatBox').classList.remove('hidden');
   $('micWrap').classList.remove('hidden');
   Voice.setNames(state.players);
+  paintAdult(state);
   const meP = state.players.find((p) => p.seat === state.mySeat);
   const wasForced = Voice.status().forced;
   Voice.setForced(Boolean(meP && meP.vmuted));

@@ -672,3 +672,12 @@ body.mic-open::before { content:''; position:fixed; top:0; left:0; right:0; heig
 #game .round-heading > .turn-hint { flex:0 0 100%; width:100%; min-height:28px; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #game .round-heading > .turn-hint:empty { display:block; visibility:hidden; }
 #game #roundInfo { white-space:nowrap; }
+
+/* lighter rendering: no infinite box-shadow/filter animations (they repaint every frame on weak phones) */
+.pname.turn, #game .pname.turn { animation:none; }
+.mic-btn.open { animation:none; }
+body.mic-open::before { animation:micBar 1.4s ease-in-out infinite; filter:none; }
+@keyframes micBar { 50% { opacity:.55; } }
+.adult-btn { margin-top:8px; padding:8px 14px; border-radius:12px; background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.25); font-size:13px; }
+.adult-btn.on { background:#8a2a34; border-color:#ff8a95; }
+.adult-btn:disabled { opacity:.75; }
