@@ -1,4 +1,24 @@
-const socket = io({ reconnectionDelayMax: 3000 });
+const socket = io({ reconnectionDelayMax: 3000, auth: (cb) => cb({ pass: localStorage.getItem('shelem_pass') || '' }) });
+// ---- site lock screen ----
+(() => {
+  const lock = document.getElementById('lockScreen'), input = document.getElementById('lockInput'), err = document.getElementById('lockError');
+  socket.on('connect', () => lock.classList.add('hidden'));
+  socket.on('connect_error', (e) => {
+    if (e && e.message === 'locked') {
+      lock.classList.remove('hidden');
+      err.textContent = localStorage.getItem('shelem_pass') ? 'رمز اشتباه است' : '';
+      localStorage.removeItem('shelem_pass');
+    }
+  });
+  document.getElementById('lockForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const v = input.value.trim();
+    if (!v) return;
+    localStorage.setItem('shelem_pass', v);
+    err.textContent = 'در حال بررسی…';
+    socket.disconnect(); socket.connect();
+  });
+})();
 let clientId = localStorage.getItem('shelem_clientId');
 if (!clientId) { clientId = Math.random().toString(36).slice(2) + Date.now(); localStorage.setItem('shelem_clientId', clientId); }
 let myName = localStorage.getItem('shelem_name') || '';
@@ -73,7 +93,7 @@ $('confirmDiscard').onclick = () => {
   socket.emit('discardKitty', { cardIds: selectedKittyCards });
   selectedKittyCards = [];
 };
-$('scoreBtn').onclick = () => { $('scoreModal').classList.remove('hidden'); renderScoreModal(); };
+$('scoreBtn').onclick = () => { $('scoreModal').classList.remove('hidden'); if (lastState) scoreSig = scoreSigOf(lastState); renderScoreModal(); };
 let adminPick = [];
 function renderAdmin() {
   const st = lastState;
@@ -428,8 +448,13 @@ function render(state) {
     $('game').classList.remove('hidden');
     renderGame(state);
   }
-  if (!$('scoreModal').classList.contains('hidden')) renderScoreModal();
+  if (!$('scoreModal').classList.contains('hidden')) {
+    const sig = scoreSigOf(state);
+    if (sig !== scoreSig) { scoreSig = sig; renderScoreModal(); }
+  } else scoreSig = '';
 }
+let scoreSig = '';
+function scoreSigOf(state) { return JSON.stringify([state.history.length, state.scores, state.state === 'gameOver', state.winnerTeam, state.teamNames, state.targetScore, state.isAdmin]); }
 
 const TARGETS = [[0, 'آزاد'], [330, '۳۳۰'], [660, '۶۶۰'], [1165, '۱۱۶۵'], [1650, '۱۶۵۰']];
 function renderTarget(state) {

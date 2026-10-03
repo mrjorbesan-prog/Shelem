@@ -118,7 +118,7 @@ const Sfx = (() => {
     duck(on) {
       if (!ctx || !musicOn) return;
       musicBus.gain.cancelScheduledValues(ctx.currentTime);
-      musicBus.gain.linearRampToValueAtTime(on ? 0.3 : 1, ctx.currentTime + 0.3);
+      musicBus.gain.linearRampToValueAtTime(on ? 0.2 : 1, ctx.currentTime + 0.3);
     },
     toggleMusic() {
       unlock();

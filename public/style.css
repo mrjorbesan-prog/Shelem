@@ -658,3 +658,17 @@ body.mic-open::before { content:''; position:fixed; top:0; left:0; right:0; heig
 #game .table-trump { width:auto; height:auto; min-width:0; max-width:none; transform:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; padding:3px 9px 2px; border-radius:10px; }
 #game .table-trump small { font-size:9px; line-height:1.1; }
 #game .tsuit { display:block; width:auto; height:auto; min-width:0; font-size:21px; line-height:1; transform:none; padding:0; margin:0; }
+
+/* site lock screen */
+.lock-screen { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at 50% 0%, #1d2447 0%, #0d1128 60%, #070915 100%); }
+.lock-screen form { width:min(320px, 88vw); padding:22px; border-radius:18px; background:rgba(17,24,48,.96); border:1px solid rgba(231,189,98,.5); text-align:center; box-shadow:0 18px 44px rgba(0,0,0,.6); }
+.lock-screen h2 { margin:0 0 6px; color:#ffe4a4; }
+.lock-screen p { margin:0 0 12px; color:#c8d2ea; font-size:13px; }
+.lock-screen input { width:100%; box-sizing:border-box; padding:11px; border-radius:10px; text-align:center; font-size:16px; letter-spacing:2px; margin-bottom:10px; }
+.lock-screen button { width:100%; padding:11px; border-radius:10px; font-weight:bold; }
+#lockError { min-height:18px; margin-top:8px; color:#ff8a95; font-size:12px; }
+
+/* stable topbar: the turn hint always owns its own row, so nothing jumps when the turn changes */
+#game .round-heading > .turn-hint { flex:0 0 100%; width:100%; min-height:28px; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#game .round-heading > .turn-hint:empty { display:block; visibility:hidden; }
+#game #roundInfo { white-space:nowrap; }
