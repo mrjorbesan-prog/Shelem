@@ -6,6 +6,26 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { pingInterval: 15000, pingTimeout: 25000 });
+// ---- site lock: only clients that present the password can open a socket ----
+const crypto = require('crypto');
+const SITE_PASSWORD = process.env.SITE_PASSWORD || ''; // empty = site is open to everyone
+const sha = (x) => crypto.createHash('sha256').update(String(x)).digest();
+const lockFails = new Map();
+io.use((socket, next) => {
+  if (!SITE_PASSWORD) return next();
+  const fwd = socket.handshake.headers['x-forwarded-for'];
+  const ip = (fwd ? String(fwd).split(',')[0].trim() : socket.handshake.address) || 'x';
+  const f = lockFails.get(ip) || { n: 0, t: Date.now() };
+  if (Date.now() - f.t > 60000) { f.n = 0; f.t = Date.now(); }
+  const given = (socket.handshake.auth && socket.handshake.auth.pass) || '';
+  if (f.n >= 8) return next(new Error('locked'));
+  if (!crypto.timingSafeEqual(sha(given), sha(SITE_PASSWORD))) {
+    if (given) { f.n += 1; lockFails.set(ip, f); }
+    return next(new Error('locked'));
+  }
+  next();
+});
+setInterval(() => { for (const [k, v] of lockFails) if (Date.now() - v.t > 60000) lockFails.delete(k); }, 60000);
 process.on('uncaughtException', (e) => console.error('uncaughtException', e));
 process.on('unhandledRejection', (e) => console.error('unhandledRejection', e));
 app.get('/health', (req, res) => res.send('ok'));
@@ -536,7 +556,7 @@ io.on('connection', (socket) => {
     if (!me || me.socketId !== socket.id || !me.mic) return;
     if (room.vmuted && room.vmuted[me.clientId]) return;
     const len = data && (data.length !== undefined ? data.length : data.byteLength);
-    if (!len || len > 700 || !allow()) return;
+    if (!len || len > 1100 || !allow()) return;
     for (const other of room.players) {
       if (other.clientId === me.clientId || !other.socketId) continue;
       const target = io.sockets.sockets.get(other.socketId);
